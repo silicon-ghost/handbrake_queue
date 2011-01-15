@@ -1,12 +1,15 @@
 import re
 import subprocess
 import time
+import logging
 from cStringIO import StringIO
 from oreillycookbook.files import all_folders
 import argparse
 from pprint import pprint
 
-    
+from dvdinfo import DvdInfo, Title, SubtitleTrack, AudioTrack, Chapter
+
+logger = logging.getLogger('hbscan')    
 
 TRANSCODER = 'C:\\Program Files (x86)\\Handbrake\\HandBrakeCLI.exe'
 
@@ -27,9 +30,6 @@ STATES = enum('ReadLine', 'Scanning',
               'SubtitleTracksStart', 'InSubtitleTracks', 'SubtitleTracksEnd',
               'Done')
     
-class Title(object):
-    def __init__(self, title_num):
-        self.title_num = title_num
 
 def parseOutput(src):
     assert isinstance(src, str)
@@ -38,6 +38,8 @@ def parseOutput(src):
     states = list()
     states.append(STATES.Scanning)
     states.append(STATES.ReadLine)
+    
+    dvd = DvdInfo()    
     while 1:
         state = states.pop()
         if state == STATES.ReadLine:
@@ -58,13 +60,14 @@ def parseOutput(src):
                 states.append(STATES.ReadLine)
         
         elif state == STATES.TitleStart:
-            print('{:03d}: Title Start'.format(line_num))
+            logger.debug('%03d: Title Start', line_num)
             # Initialize a new title here
+            title = Title()
             match = re.search('(?<=\+ title )\d+(?=:)', line)
             if match:
                 title_num = int(match.group())
-                print('{:03d}: Found title #{}'.format(line_num, title_num))
-                title = Title(title_num)
+                logger.info('%03d: Found title #%d', line_num, title_num)
+                title.num = title_num
                 states.append(STATES.InTitle)
                 states.append(STATES.ReadLine)
                
@@ -88,15 +91,15 @@ def parseOutput(src):
                 match = re.search('(?<=\+ duration: )(\d\d):(\d\d):(\d\d)', line)
                 if match:
                     duration_str = match.group()
-                    duration_seconds = int(match.group(1)) * 3600 + int(match.group(2)) * 60 + int(match.group(3))
-                    print('{:03d}: Found duration {} ({} s)'.format(line_num, duration_str, duration_seconds))
+                    title.duration = int(match.group(1)) * 3600 + int(match.group(2)) * 60 + int(match.group(3))
+                    logger.info('%03d: Found duration %s (%d s)', line_num, duration_str, title.duration)
                     states.append(STATES.InTitle)
                     states.append(STATES.ReadLine)
                     continue
                 match = re.search('\+ size: ([^,]+), pixel aspect: ([^,]+), display aspect: ([^,]+), ([0-9]*\.?[0-9]+) fps', line)
                 if match:
-                    fps = match.group(4)
-                    print('{:03d}: Found fps {}'.format(line_num, fps))
+                    title.fps = match.group(4)
+                    logger.info('%03d: Found fps %s', line_num, title.fps)
                     states.append(STATES.InTitle)
                     states.append(STATES.ReadLine)
                     continue
@@ -104,30 +107,34 @@ def parseOutput(src):
                 states.append(STATES.ReadLine)
         
         elif state == STATES.TitleEnd:
-            print('{:03d}: Title End'.format(line_num))
+            logger.debug('%03d: Title End', line_num)
             # Finalize title here
+            dvd.add_title(title)
             states.append(STATES.Scanning)
             
         elif state == STATES.ChaptersStart:
-            print('{:03d}: Chapters Start'.format(line_num))
+            logger.debug('%03d: Chapters Start', line_num)
             
             states.append(STATES.InChapters)
             states.append(STATES.ReadLine)
             
         elif state == STATES.InChapters:
-            print('{:03d}: In Chapters'.format(line_num))
+            logger.debug('%03d: In Chapters', line_num)
             if line.startswith('    +'):
                 match = re.search('\+ (\d+): cells (\d+)->(\d+), (\d+) blocks, duration (\d\d):(\d\d):(\d\d)', line)
                 if match:
-                    chapter_num = int(match.group(1))
-                    cell_start = int(match.group(2))
-                    cell_end = int(match.group(3))
-                    block_count = int(match.group(4))
-                    duration = int(match.group(5)) * 3600 + int(match.group(6)) * 60 + int(match.group(7))
+                    chapter = Chapter(
+                        num=int(match.group(1)), 
+                        cell_start=int(match.group(2)), 
+                        cell_end=int(match.group(3)), 
+                        block_count=int(match.group(4)), 
+                        duration=int(match.group(5)) * 3600 + int(match.group(6)) * 60 + int(match.group(7)))
+                    
                     # Add chapter
-                    print('{:03d}: Found chapter #{}, cells {}->{}, {} blocks, {} seconds'.format(line_num, chapter_num, cell_start, cell_end, block_count, duration))
+                    logger.info('%03d: Found chapter #%d, cells %d->%d, %d blocks, %d seconds', line_num, chapter.num, chapter.cell_start, chapter.cell_end, chapter.block_count, chapter.duration)
+                    title.add_chapter(chapter)
                 else:
-                    print('{:03d}: Error Parsing Chapter Info: "{}"'.format(line_num, line))
+                    logger.error('%03d: Error Parsing Chapter Info: "%s"', line_num, line)
                     
                 states.append(STATES.InChapters)
                 states.append(STATES.ReadLine)
@@ -135,19 +142,19 @@ def parseOutput(src):
                 states.append(STATES.ChaptersEnd)
             
         elif state == STATES.ChaptersEnd:
-            print('{:03d}: Chapters End'.format(line_num))
+            logger.debug('%03d: Chapters End', line_num)
 
 
         elif state == STATES.AudioTracksStart:
-            print('{:03d}: Audio Tracks Start'.format(line_num))
+            logger.debug('%03d: Audio Tracks Start', line_num)
             
             states.append(STATES.InAudioTracks)
             states.append(STATES.ReadLine)
             
         elif state == STATES.InAudioTracks:
-            print('{:03d}: In Audio Tracks'.format(line_num))
+            logger.debug('%03d: In Audio Tracks', line_num)
             if line.startswith('    +'):
-                # Try first HB format
+                # There are 2 possible HB audio track formats
                 match1 = re.search('\+ (\d+), (.+?) \(iso639-2: ([^)]+)\), (\d+)Hz, (\d+)bps', line)
                 match2 = re.search('\+ (\d+), (.+?) \(iso639-2: ([^)]+)\)', line)
                 if match1:
@@ -157,7 +164,7 @@ def parseOutput(src):
                     track_sr = int(match1.group(4))
                     track_rate = int(match1.group(5))
                     # Add audio track
-                    print('{:03d}: Found audio track #{}, desc="{}", language="{}", sr={}Hz, bps={}bps'.format(line_num, track_num, track_desc, track_lang, track_sr, track_rate))
+                    logger.info('%03d: Found audio track #%d, desc="%s", language="%s", sr=%dHz, bps=%dbps', line_num, track_num, track_desc, track_lang, track_sr, track_rate)
                 elif match2:
                     # Try alternate HB format
                     track_num = int(match1.group(1))
@@ -166,10 +173,10 @@ def parseOutput(src):
                     track_sr = 0
                     track_rate = 0
                     # Add audio track
-                    print('{:03d}: Found audio track #{}, desc="{}", language="{}" (no rate information)'.format(line_num, track_num, track_desc, track_lang))
+                    logger.info('%03d: Found audio track #%d, desc="%s", language="%s" (no rate information)', line_num, track_num, track_desc, track_lang)
                     
                 else:
-                    print('{:03d}: Error Parsing Audio Track Info: "{}"'.format(line_num, line))
+                    logger.error('%03d: Error Parsing Audio Track Info: "%s"', line_num, line)
                     
                                     
                 states.append(STATES.InAudioTracks)
@@ -180,16 +187,16 @@ def parseOutput(src):
 
             
         elif state == STATES.AudioTracksEnd:
-            print('{:03d}: Audio Tracks End'.format(line_num))
+            logger.debug('%03d: Audio Tracks End', line_num)
 
         elif state == STATES.SubtitleTracksStart:
-            print('{:03d}: Subtitle Tracks Start'.format(line_num))
+            logger.debug('%03d: Subtitle Tracks Start', line_num)
             
             states.append(STATES.InSubtitleTracks)
             states.append(STATES.ReadLine)
             
         elif state == STATES.InSubtitleTracks:
-            print('{:03d}: In Subtitle Tracks'.format(line_num))
+            logger.debug('%03d: In Subtitle Tracks', line_num)
             if line.startswith('    +'):
                 match = re.search('\+ (\d+), (.+) \(iso639-2: ([^)]+)\) \((Bitmap|Text)\)\(([^)]+)\)', line)
                 if match:
@@ -199,9 +206,9 @@ def parseOutput(src):
                     track_format = match.group(4)
                     track_src_name = match.group(5)
                     # Add subtitle track
-                    print('{:03d}: Found subtitle #{}, desc="{}", language="{}", format="{}", src_name="{}"'.format(line_num, track_num, track_desc, track_lang, track_format, track_src_name))
+                    logger.info('%03d: Found subtitle #%d, desc="%s", language="%s", format="%s", src_name="%s"', line_num, track_num, track_desc, track_lang, track_format, track_src_name)
                 else:
-                    print('{:03d}: Error Parsing Subtitle Track Info: "{}"'.format(line_num, line))
+                    logger.error('%03d: Error Parsing Subtitle Track Info: "%s"', line_num, line)
                     
                 states.append(STATES.InSubtitleTracks)
                 states.append(STATES.ReadLine)
@@ -209,10 +216,10 @@ def parseOutput(src):
                 states.append(STATES.SubtitleTracksEnd)
             
         elif state == STATES.SubtitleTracksEnd:
-            print('{:03d}: Subtitle Tracks End'.format(line_num))
+            logger.debug('%03d: Subtitle Tracks End', line_num)
             
         elif state == STATES.Done:
-            print('{:03d}: Done'.format(line_num))
+            logger.info('%03d: Done', line_num)
             break
         
         else:
@@ -233,13 +240,29 @@ def main():
     args = parser.parse_args()
     
     
+    formatter = logging.Formatter('%(asctime)s - %(levelname)5s - %(module)s:%(lineno)03d[%(funcName)s()] - %(message)s')
+    fh = logging.FileHandler(filename='hbscan.log')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    
+    # create console handler and set level to debug
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    
+    logger.setLevel(logging.DEBUG)
+
+    
     folders = all_folders(args.root_dir, single_level=True)
     for movie_dir in folders:
-        print('****** Scanning folder ****** {}'.format(movie_dir))
+        logger.info('****** Scanning folder ****** %s', movie_dir)
         cmd = ['{}'.format(TRANSCODER), '-i', '{}'.format(movie_dir), '-t', '0']
         scan_start = time.time()
         scanning = subprocess.Popen(cmd, executable=TRANSCODER, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         (stdout, stderr) = scanning.communicate()
+        logger.info('Scan took %.3f seconds', time.time() - scan_start)
         assert isinstance(stdout, str)
         #lines = stdout.splitlines()
         #parser = HandbrakeTitleParser()
