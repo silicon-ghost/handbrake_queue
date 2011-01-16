@@ -1,0 +1,10 @@
+#!wing
+#!version=4.0
+##################################################################
+# Wing IDE project file                                          #
+##################################################################
+[project attributes]
+proj.file-list = [loc('dvdinfo.py'),
+                  loc('hbq.py'),
+                  loc('hbscan.py')]
+proj.file-type = 'shared'
