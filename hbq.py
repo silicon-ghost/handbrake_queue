@@ -1,10 +1,32 @@
 import xml.etree.ElementTree as et
 from xml.etree.ElementTree import Element, SubElement, ElementTree
 from xml.dom.minidom import parseString
+from oreillycookbook.files import all_folders
+import os.path
 import re
+
+from hbscan import ParseOutput, ScanDvd
+
 
 
 def main():
+    src_root_folder = r'\\Archer\archer_s\_video_raw'
+    dst_root_folder = 'W:\\video_handbrake\\'
+
+    for folder in all_folders(src_root_folder, single_level=True):
+        #print('{0}'.format(folder))
+        basename = os.path.basename(folder)
+        print('{0}'.format(basename))
+        match = re.search('(.+?)_?[sS](\d+)_?[dD](\d+)', basename)
+        if match:
+            series = match.group(1)
+            season = int(match.group(2))
+            disc = int(match.group(3))
+            print('    series = "{0}", season = {1}, disc = {2}'.format(series, season, disc))
+        else:
+            print('    *** Unable to parse folder name ***')
+            
+def hbq_ex1():
     src_root_folder = 'W:\\_video_raw\\'
     dst_root_folder = 'W:\\video_handbrake\\'
     
@@ -55,6 +77,8 @@ def main():
         fid.close()
 
 
+        
+        
 if __name__ == '__main__':
     main()
     
