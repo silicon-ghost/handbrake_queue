@@ -3,9 +3,6 @@ import subprocess
 import time
 import logging
 from cStringIO import StringIO
-from oreillycookbook.files import all_folders
-import argparse
-from pprint import pprint
 
 from dvdinfo import DvdInfo, Title, SubtitleTrack, AudioTrack, Chapter
 
@@ -20,8 +17,6 @@ def enum(*sequential, **named):
 class ParseException(Exception):
     pass
 
-class HandbrakeTitleParser(object):
-    pass
 
 STATES = enum('ReadLine', 'Scanning', 
               'TitleStart', 'InTitle', 'TitleEnd', 
@@ -30,8 +25,18 @@ STATES = enum('ReadLine', 'Scanning',
               'SubtitleTracksStart', 'InSubtitleTracks', 'SubtitleTracksEnd',
               'Done')
     
+def ScanDvd(folder):
+    logger.info('****** Scanning folder ****** %s', folder)
+    cmd = ['{}'.format(TRANSCODER), '-i', '{}'.format(folder), '-t', '0']
+    scan_start = time.time()
+    scanning = subprocess.Popen(cmd, executable=TRANSCODER, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (stdout, stderr) = scanning.communicate()
+    logger.info('Scan took %.3f seconds', time.time() - scan_start)
+    assert isinstance(stdout, str)
+    return stdout
+    
 
-def parseOutput(src):
+def ParseOutput(src):
     assert isinstance(src, str)
     s = StringIO(src)
     line_num = 0
@@ -62,12 +67,12 @@ def parseOutput(src):
         elif state == STATES.TitleStart:
             logger.debug('%03d: Title Start', line_num)
             # Initialize a new title here
-            title = Title()
             match = re.search('(?<=\+ title )\d+(?=:)', line)
             if match:
                 title_num = int(match.group())
                 logger.info('%03d: Found title #%d', line_num, title_num)
-                title.num = title_num
+                #title.num = title_num
+                title = Title(title_num)
                 states.append(STATES.InTitle)
                 states.append(STATES.ReadLine)
                
@@ -110,6 +115,7 @@ def parseOutput(src):
             logger.debug('%03d: Title End', line_num)
             # Finalize title here
             dvd.add_title(title)
+            title = None
             states.append(STATES.Scanning)
             
         elif state == STATES.ChaptersStart:
@@ -128,7 +134,8 @@ def parseOutput(src):
                         cell_start=int(match.group(2)), 
                         cell_end=int(match.group(3)), 
                         block_count=int(match.group(4)), 
-                        duration=int(match.group(5)) * 3600 + int(match.group(6)) * 60 + int(match.group(7)))
+                        duration=int(match.group(5)) * 3600 + int(match.group(6)) * 60 + int(match.group(7)),
+                        enabled=True)
                     
                     # Add chapter
                     logger.info('%03d: Found chapter #%d, cells %d->%d, %d blocks, %d seconds', line_num, chapter.num, chapter.cell_start, chapter.cell_end, chapter.block_count, chapter.duration)
@@ -158,23 +165,28 @@ def parseOutput(src):
                 match1 = re.search('\+ (\d+), (.+?) \(iso639-2: ([^)]+)\), (\d+)Hz, (\d+)bps', line)
                 match2 = re.search('\+ (\d+), (.+?) \(iso639-2: ([^)]+)\)', line)
                 if match1:
-                    track_num = int(match1.group(1))
-                    track_desc = match1.group(2)
-                    track_lang = match1.group(3)
-                    track_sr = int(match1.group(4))
-                    track_rate = int(match1.group(5))
+                    track = AudioTrack(
+                        num=int(match1.group(1)), 
+                        desc=match1.group(2), 
+                        lang=match1.group(3), 
+                        sr=int(match1.group(4)), 
+                        rate=int(match1.group(5)),
+                        enabled=True)
                     # Add audio track
-                    logger.info('%03d: Found audio track #%d, desc="%s", language="%s", sr=%dHz, bps=%dbps', line_num, track_num, track_desc, track_lang, track_sr, track_rate)
+                    logger.info('%03d: Found audio track #%d, desc="%s", language="%s", sr=%dHz, bps=%dbps', line_num, track.num, track.desc, track.lang, track.sr, track.rate)
+                    title.add_audio_track(track)
                 elif match2:
                     # Try alternate HB format
-                    track_num = int(match1.group(1))
-                    track_desc = match1.group(2)
-                    track_lang = match1.group(3)
-                    track_sr = 0
-                    track_rate = 0
+                    track = AudioTrack(
+                        num=int(match1.group(1)), 
+                        desc=match1.group(2), 
+                        lang=match1.group(3), 
+                        sr=-1, 
+                        rate=-1,
+                        enabled=True)
                     # Add audio track
-                    logger.info('%03d: Found audio track #%d, desc="%s", language="%s" (no rate information)', line_num, track_num, track_desc, track_lang)
-                    
+                    logger.info('%03d: Found audio track #%d, desc="%s", language="%s" (no rate information)', line_num, track.num, track.desc, track.lang)
+                    title.add_audio_track(track)
                 else:
                     logger.error('%03d: Error Parsing Audio Track Info: "%s"', line_num, line)
                     
@@ -200,13 +212,16 @@ def parseOutput(src):
             if line.startswith('    +'):
                 match = re.search('\+ (\d+), (.+) \(iso639-2: ([^)]+)\) \((Bitmap|Text)\)\(([^)]+)\)', line)
                 if match:
-                    track_num = int(match.group(1))
-                    track_desc = match.group(2)
-                    track_lang = match.group(3)
-                    track_format = match.group(4)
-                    track_src_name = match.group(5)
+                    track = SubtitleTrack(
+                        num=int(match.group(1)), 
+                        desc=match.group(2), 
+                        lang=match.group(3), 
+                        format=match.group(4), 
+                        src_name=match.group(5),
+                        enabled=True)
                     # Add subtitle track
-                    logger.info('%03d: Found subtitle #%d, desc="%s", language="%s", format="%s", src_name="%s"', line_num, track_num, track_desc, track_lang, track_format, track_src_name)
+                    logger.info('%03d: Found subtitle #%d, desc="%s", language="%s", format="%s", src_name="%s"', line_num, track.num, track.desc, track.lang, track.format, track.src_name)
+                    title.add_subtitle_track(track)
                 else:
                     logger.error('%03d: Error Parsing Subtitle Track Info: "%s"', line_num, line)
                     
@@ -224,11 +239,16 @@ def parseOutput(src):
         
         else:
             raise ParseException('Unknown State')
-            
+    
+    return dvd
             
 
 
 def main():
+    from oreillycookbook.files import all_folders
+    import argparse
+    from pprint import pprint
+    
     movie_dir = 'W:\\_video_raw\\MASHS1D1'
     movie_dir = r'\\tpol\Raw Video\VOYAGER_S1D1'
     movie_dir = r'\\Archer\archer_s\_video_raw\COMBAT_SEASON_2_MISSION_1_DISC_1'
@@ -252,22 +272,14 @@ def main():
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     
     folders = all_folders(args.root_dir, single_level=True)
     for movie_dir in folders:
-        logger.info('****** Scanning folder ****** %s', movie_dir)
-        cmd = ['{}'.format(TRANSCODER), '-i', '{}'.format(movie_dir), '-t', '0']
-        scan_start = time.time()
-        scanning = subprocess.Popen(cmd, executable=TRANSCODER, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        (stdout, stderr) = scanning.communicate()
-        logger.info('Scan took %.3f seconds', time.time() - scan_start)
-        assert isinstance(stdout, str)
-        #lines = stdout.splitlines()
-        #parser = HandbrakeTitleParser()
-        dvd = parseOutput(stdout)
-        #print(stdout)
+        cmd_out = ScanDvd(movie_dir)
+        dvd = ParseOutput(cmd_out)
+        pprint(dvd)
         
     
 

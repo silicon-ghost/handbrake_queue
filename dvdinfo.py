@@ -1,19 +1,19 @@
-
 from collections import namedtuple
 
-AudioTrack = namedtuple('AudioTrack', 'num, desc, lang, sr, rate')
-SubtitleTrack = namedtuple('SubtitleTrack', 'num, desc, lang, format, src_name')
-Chapter = namedtuple('Chapter', 'num, cell_start, cell_end, block_count, duration')
+AudioTrack = namedtuple('AudioTrack', 'num, desc, lang, sr, rate, enabled')
+SubtitleTrack = namedtuple('SubtitleTrack', 'num, desc, lang, format, src_name, enabled')
+Chapter = namedtuple('Chapter', 'num, cell_start, cell_end, block_count, duration, enabled')
 
 
 class Title(object):
-    def __init__(self):
-        self.num = None
-        self.duration = None
-        self.fps = None
-        self.audio_tracks = list()
-        self.subtitle_tracks = list()
-        self.chapters = list()
+    def __init__(self, num=None, duration=None, fps=None, audio_tracks=None, subtitle_tracks=None, chapters=None, enabled=True):
+        self.num = num
+        self.duration = duration
+        self.fps = fps
+        self.audio_tracks = audio_tracks or list()
+        self.subtitle_tracks = subtitle_tracks or list()
+        self.chapters = chapters or list()
+        self.enabled = enabled
     
     def add_audio_track(self, track):
         self.audio_tracks.append(track)
@@ -24,13 +24,21 @@ class Title(object):
     def add_chapter(self, chapter):
         self.chapters.append(chapter)
         
-    
+    def __repr__(self):
+        return ''.join(('Title(\n\tnum=', repr(self.num), ',\n\tduration=', repr(self.duration), ',\n\tfps=', repr(self.fps),
+            ',\n\taudio_tracks=[', ',\n\t\t'.join(repr(x) for x in self.audio_tracks), 
+            '],\n\tsubtitle_tracks=[', ',\n\t\t'.join(repr(x) for x in self.subtitle_tracks), 
+            '],\n\tchapters=[', ',\n\t\t'.join(repr(x) for x in self.chapters), 
+            '],\n\tenabled=', repr(self.enabled), ')\n'))
     
     
 class DvdInfo(object):
-    def __init__(self):
-        self.titles = list()
+    def __init__(self, titles=list()):
+        self.titles = titles
 
     def add_title(self, title):
         self.titles.append(title)
+        
+    def __repr__(self):
+        return 'DvdInfo(' + repr(self.titles) + ')\n'
 
