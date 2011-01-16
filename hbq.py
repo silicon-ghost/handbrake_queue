@@ -4,15 +4,37 @@ from xml.dom.minidom import parseString
 from oreillycookbook.files import all_folders
 import os.path
 import re
-
+from pprint import pprint
 from hbscan import ParseOutput, ScanDvd
+from dvdinfo import DvdInfo
+
+options = {'eps_len': ((48.8*60, 2*60), (30*60, 2*60)), 
+            'expect_2x_len': True,
+            'remove_dup_titles': True}
+
+def GetInHMS(seconds):
+    hours = seconds / 3600
+    seconds -= 3600*hours
+    minutes = seconds / 60
+    seconds -= 60*minutes
+    if hours == 0:
+        return "%02d:%02d" % (minutes, seconds)
+    return "%02d:%02d:%02d" % (hours, minutes, seconds)
 
 
-
+def RemoveDuplicateTitles(dvd):
+    assert(isinstance(dvd, DvdInfo))
+    for j, src_title in enumerate(dvd.titles):
+        if src_title.enabled:
+            for curr_title in dvd.titles[j+1:]:
+                if curr_title.enabled and src_title.SimilarToTitle(curr_title):
+                    curr_title.enabled = False
+    
 def main():
     src_root_folder = r'\\Archer\archer_s\_video_raw'
     dst_root_folder = 'W:\\video_handbrake\\'
 
+    
     for folder in all_folders(src_root_folder, single_level=True):
         #print('{0}'.format(folder))
         basename = os.path.basename(folder)
@@ -23,6 +45,18 @@ def main():
             season = int(match.group(2))
             disc = int(match.group(3))
             print('    series = "{0}", season = {1}, disc = {2}'.format(series, season, disc))
+            hb_out = ScanDvd(folder)
+            dvd = ParseOutput(hb_out)
+            if options['remove_dup_titles']:
+                RemoveDuplicateTitles(dvd)
+            active_durations = [x.duration for x in dvd.titles if x.enabled]
+            active_duration_total = sum(active_durations)
+            inactive_durations = [x.duration for x in dvd.titles if not x.enabled]
+            inactive_duration_total = sum(inactive_durations)
+            print('*** {0} active titles with total playtime of {1} ({2} inactive titles with playtime of {3}) ***'.format(
+                len(active_durations), GetInHMS(active_duration_total),
+                len(inactive_durations), GetInHMS(inactive_duration_total)))
+            pprint(dvd)
         else:
             print('    *** Unable to parse folder name ***')
             
