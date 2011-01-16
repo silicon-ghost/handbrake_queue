@@ -15,13 +15,13 @@ class Title(object):
         self.chapters = chapters or list()
         self.enabled = enabled
     
-    def add_audio_track(self, track):
+    def AddAudioTrack(self, track):
         self.audio_tracks.append(track)
     
-    def add_subtitle_track(self, track):
+    def AddSubtitleTrack(self, track):
         self.subtitle_tracks.append(track)
     
-    def add_chapter(self, chapter):
+    def AddChapter(self, chapter):
         self.chapters.append(chapter)
     
     def SimilarToTitle(self, title):
@@ -44,7 +44,7 @@ class DvdInfo(object):
     def __init__(self, titles=None):
         self.titles = titles or list()
 
-    def add_title(self, title):
+    def AddTitle(self, title):
         self.titles.append(title)
         
     def __repr__(self):

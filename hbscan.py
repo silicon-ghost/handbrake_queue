@@ -114,7 +114,7 @@ def ParseOutput(src):
         elif state == STATES.TitleEnd:
             logger.debug('%03d: Title End', line_num)
             # Finalize title here
-            dvd.add_title(title)
+            dvd.AddTitle(title)
             title = None
             states.append(STATES.Scanning)
             
@@ -139,7 +139,7 @@ def ParseOutput(src):
                     
                     # Add chapter
                     logger.info('%03d: Found chapter #%d, cells %d->%d, %d blocks, %d seconds', line_num, chapter.num, chapter.cell_start, chapter.cell_end, chapter.block_count, chapter.duration)
-                    title.add_chapter(chapter)
+                    title.AddChapter(chapter)
                 else:
                     logger.error('%03d: Error Parsing Chapter Info: "%s"', line_num, line)
                     
@@ -174,7 +174,7 @@ def ParseOutput(src):
                         enabled=True)
                     # Add audio track
                     logger.info('%03d: Found audio track #%d, desc="%s", language="%s", sr=%dHz, bps=%dbps', line_num, track.num, track.desc, track.lang, track.sr, track.rate)
-                    title.add_audio_track(track)
+                    title.AddAudioTrack(track)
                 elif match2:
                     # Try alternate HB format
                     track = AudioTrack(
@@ -186,7 +186,7 @@ def ParseOutput(src):
                         enabled=True)
                     # Add audio track
                     logger.info('%03d: Found audio track #%d, desc="%s", language="%s" (no rate information)', line_num, track.num, track.desc, track.lang)
-                    title.add_audio_track(track)
+                    title.AddAudioTrack(track)
                 else:
                     logger.error('%03d: Error Parsing Audio Track Info: "%s"', line_num, line)
                     
@@ -221,7 +221,7 @@ def ParseOutput(src):
                         enabled=True)
                     # Add subtitle track
                     logger.info('%03d: Found subtitle #%d, desc="%s", language="%s", format="%s", src_name="%s"', line_num, track.num, track.desc, track.lang, track.format, track.src_name)
-                    title.add_subtitle_track(track)
+                    title.AddSubtitleTrack(track)
                 else:
                     logger.error('%03d: Error Parsing Subtitle Track Info: "%s"', line_num, line)
                     
