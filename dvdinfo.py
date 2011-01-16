@@ -23,9 +23,17 @@ class Title(object):
     
     def add_chapter(self, chapter):
         self.chapters.append(chapter)
-        
+    
+    def SimilarToTitle(self, title):
+        """Returns True if this Title has equal contents to title, ignoring 'num' and 'enabled' fields."""
+        return (self.duration == title.duration and 
+            self.fps == title.fps and 
+            self.audio_tracks == title.audio_tracks and
+            self.subtitle_tracks == title.subtitle_tracks and
+            self.chapters == title.chapters)
+    
     def __repr__(self):
-        return ''.join(('Title(\n\tnum=', repr(self.num), ',\n\tduration=', repr(self.duration), ',\n\tfps=', repr(self.fps),
+        return ''.join(('Title(num=', repr(self.num), ',\n\tduration=', repr(self.duration), ',\n\tfps=', repr(self.fps),
             ',\n\taudio_tracks=[', ',\n\t\t'.join(repr(x) for x in self.audio_tracks), 
             '],\n\tsubtitle_tracks=[', ',\n\t\t'.join(repr(x) for x in self.subtitle_tracks), 
             '],\n\tchapters=[', ',\n\t\t'.join(repr(x) for x in self.chapters), 
@@ -33,8 +41,8 @@ class Title(object):
     
     
 class DvdInfo(object):
-    def __init__(self, titles=list()):
-        self.titles = titles
+    def __init__(self, titles=None):
+        self.titles = titles or list()
 
     def add_title(self, title):
         self.titles.append(title)
