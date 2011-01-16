@@ -85,7 +85,7 @@ def ParseHBOutput(src):
                 raise ParseException('Unable to parse title number')
                 
         elif state == STATES.InTitle:
-            if line.startswith('+'):
+            if line.startswith('+') or line.startswith('HandBrake has exited'):
                 states.append(STATES.TitleEnd)
             elif line.startswith('  + chapters:'):
                 states.append(STATES.InTitle)
@@ -276,7 +276,7 @@ def main():
     logger.addHandler(ch)
     
     # set overall logging detail here
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     folders = all_folders(args.root_dir, single_level=True)
     for movie_dir in folders:
