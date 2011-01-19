@@ -55,13 +55,14 @@ class Title(object):
     
 class DvdInfo(object):
     """Describes the content of a single DVD"""
-    def __init__(self, titles=None):
+    def __init__(self, titles=None, folder=None):
         self.titles = titles or list()
+        self.folder = folder or list()
 
     def AddTitle(self, title):
         """Add a Title to list of titles"""
         self.titles.append(title)
         
     def __repr__(self):
-        return 'DvdInfo(' + repr(self.titles) + ')\n'
+        return 'DvdInfo(' + repr(self.titles) + ', ' + repr(self.folder) + ')\n'
 
