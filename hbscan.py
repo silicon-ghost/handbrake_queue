@@ -113,6 +113,14 @@ def ParseHBOutput(src):
                     states.append(STATES.InTitle)
                     states.append(STATES.ReadLine)
                     continue
+                match = re.search('\+ vts \d+, ttn \d+, cells \d+->\d+ \((\d+) blocks\)', line)
+                if match:
+                    title.num_blocks = int(match.group(1))
+                    logger.info('%03d: Found block count = %s', line_num, title.num_blocks)
+                    states.append(STATES.InTitle)
+                    states.append(STATES.ReadLine)
+                    continue
+                
                 states.append(STATES.InTitle)
                 states.append(STATES.ReadLine)
         
@@ -175,7 +183,7 @@ def ParseHBOutput(src):
                         lang=match1.group(3), 
                         sr=int(match1.group(4)), 
                         rate=int(match1.group(5)),
-                        enabled=True)
+                        enabled=False)
                     # Add audio track
                     logger.info('%03d: Found audio track #%d, desc="%s", language="%s", sr=%dHz, bps=%dbps', 
                                 line_num, track.num, track.desc, track.lang, track.sr, track.rate)
@@ -188,7 +196,7 @@ def ParseHBOutput(src):
                         lang=match1.group(3), 
                         sr=-1, 
                         rate=-1,
-                        enabled=True)
+                        enabled=False)
                     # Add audio track
                     logger.info('%03d: Found audio track #%d, desc="%s", language="%s" (no rate information)', 
                                 line_num, track.num, track.desc, track.lang)
@@ -219,7 +227,7 @@ def ParseHBOutput(src):
                         lang=match.group(3), 
                         format=match.group(4), 
                         src_name=match.group(5),
-                        enabled=True)
+                        enabled=False)
                     # Add subtitle track
                     logger.info('%03d: Found subtitle #%d, desc="%s", language="%s", format="%s", src_name="%s"', 
                                 line_num, track.num, track.desc, track.lang, track.format, track.src_name)
