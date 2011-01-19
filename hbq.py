@@ -4,6 +4,7 @@ import xml.etree.ElementTree as et
 from xml.etree.ElementTree import Element, SubElement, ElementTree
 from xml.dom.minidom import parseString
 from collections import namedtuple
+import argparse
 import logging
 import os.path
 import re
@@ -15,7 +16,8 @@ from dvdinfo import DvdInfo
 logger = logging.getLogger('hbq')
 
 EpisodeDetails = namedtuple('EpisodeDetails', 
-                            'title_idx, title_num, season, eps_or_extra, is_2x_eps, num')
+                            'folder, title_idx, title_num, season, eps_or_extra, eps_start_num, eps_end_num')
+
 """
 options = {'eps_duration': ((48.8*60, 2*60), (30*60, 2*60)), 
            'expect_2x_duration': True,
@@ -31,6 +33,7 @@ options = {'eps_duration': ((48.8*60, 2*60),),
            'extras_start_num': 1,
            'title_min_duration': 60}
 
+
 def GetInHMS(seconds):
     """Returns a string in HH:MM:SS format from an integer seconds value"""
     hours = seconds / 3600
@@ -42,82 +45,168 @@ def GetInHMS(seconds):
     return "%02d:%02d:%02d" % (hours, minutes, seconds)
 
 
-def RemoveDuplicateTitles(dvd):
-    """Clears the enabled flag for any Titles that appear to be duplicates of earlier Titles on this DVD"""
-    for j, src_title in enumerate(dvd.titles):
-        if src_title.enabled:
-            for curr_title in dvd.titles[j+1:]:
-                if curr_title.enabled and src_title.SimilarToTitle(curr_title):
-                    curr_title.enabled = False
-                    logger.debug('Title #%d appears to be a duplicate of Title #%d', 
-                                curr_title.num, src_title.num)
-
-
-def RemoveShortTitles(dvd, min_duration):
-    """Clears the enabled flag for any Titles shorter than min_duration"""
-    assert(isinstance(dvd, DvdInfo))
-    for title in dvd.titles:
-        if title.enabled and title.duration < min_duration:
-            title.enabled = False
-            logger.debug('Removed Title #%d for duration shorter than %d seconds', title.num, min_duration)
-
-
-def FindEpisodesAndExtras(dvd, eps_durations, eps_2x_durations, season, eps_start_num, extras_start_num):
-    """Finds and assigns episode/extras numbers to active Titles on this DVD"""
-    assert(isinstance(dvd, DvdInfo))
-    episodes = list()
-    for title_idx, title in enumerate(dvd.titles):
-        if not title.enabled:
-            continue
-        is_episode = any((duration - variance) < title.duration < (duration + variance) 
-                         for duration, variance in eps_durations)
-        is_2x_episode = any((duration - variance) < title.duration < (duration + variance) 
-                            for duration, variance in eps_2x_durations)
-        if is_episode:
-            logger.info('Title #%2d is episode "S%02dE%02d", duration %s', 
-                        title.num, season, eps_start_num, GetInHMS(title.duration))
-            episodes.append(EpisodeDetails(
-                            title_idx=title_idx,
-                            title_num=title.num,
-                            season=season,
-                            eps_or_extra='episode',
-                            is_2x_eps=False,
-                            num=eps_start_num))
-            eps_start_num += 1
-        elif is_2x_episode:
-            logger.info('Title #%2d is episode "S%02dE%02dE%02d", duration %s', 
-                        title.num, season, eps_start_num, eps_start_num + 1, GetInHMS(title.duration))
-            episodes.append(EpisodeDetails(
-                            title_idx=title_idx,
-                            title_num=title.num,
-                            season=season,
-                            eps_or_extra='episode',
-                            is_2x_eps=True,
-                            num=eps_start_num))
-            eps_start_num += 2
-        else:
-            logger.info('Title #%2d is extras  "S%02dExtras%02d", duration %s', 
-                        title.num, season, extras_start_num, GetInHMS(title.duration))
-            episodes.append(EpisodeDetails(
-                            title_idx=title_idx,
-                            title_num=title.num,
-                            season=season,
-                            eps_or_extra='extra',
-                            is_2x_eps=False,
-                            num=extras_start_num))
-            extras_start_num += 1
-    return episodes, eps_start_num, extras_start_num
-    
-
-def main():
-    import argparse
-    default_src_root_folder = r'\\Archer\archer_s\_video_raw'
-    dst_root_folder = 'W:\\video_handbrake\\'
-
+def ParseArguments(default_src_root_folder):
     parser = argparse.ArgumentParser(
         description='Process a series of folders, reading the DVD information, display it to stdout')
     parser.add_argument('src_root_folder', default=default_src_root_folder, nargs='?')
     args = parser.parse_args()
+    return args
+
+
+class DvdNameError(Exception):
+    pass
+
+class EpisodeDetector(object):
+    def __init__(self, eps_start_num, extras_start_num, remove_dup_titles, remove_virtual_titles, 
+                 title_min_duration, eps_durations, eps_2x_durations):
+        self.eps_start_num = eps_start_num
+        self.extras_start_num = extras_start_num
+        self.remove_dup_titles = remove_dup_titles
+        self.remove_virtual_titles = remove_virtual_titles
+        self.title_min_duration = title_min_duration
+        self.eps_durations = eps_durations
+        self.eps_2x_durations = eps_2x_durations
+        self.previous_season = None
+        self.previous_series = None
+        self.season = None
+        self.series = None
+        self.curr_dvd = None
+        self.curr_folder = None
+        self.episodes = list()
+        
+    def ProcessFolder(self, root_folder):
+        if (os.path.exists(os.path.join(root_folder, 'VIDEO_TS')) or 
+            os.path.exists(os.path.join(root_folder, 'VIDEO_TS.IFO'))):
+            # Process this folder
+            basename = os.path.basename(root_folder)
+            match = re.search('(.+?)_?[sS](\d+)_?[dD](\d+)', basename)
+            if match:
+                self.series = match.group(1)
+                self.season = int(match.group(2))
+                disc = int(match.group(3))
+                logger.info('series = "%s", season = %d, disc = %d', self.series, self.season, disc)
+                
+                self.curr_folder = root_folder
+                if (self.previous_season and self.season != self.previous_season or
+                    self.previous_series and self.series != self.previous_series):
+                    # Restart the episode numbering
+                    self.eps_start_num = 1
+                    self.extras_start_num = 1
+                
+                hb_out = ScanDvd(self.curr_folder)
+                self.curr_dvd = ParseHBOutput(hb_out)
+                if self.remove_dup_titles:
+                    self.RemoveDuplicateTitles()
+                self.RemoveShortTitles()
+                if self.remove_virtual_titles:
+                    self.RemoveVirtualTitles()
+                    
+                active_durations = [x.duration for x in self.curr_dvd.titles if x.enabled]
+                active_duration_total = sum(active_durations)
+                inactive_durations = [x.duration for x in self.curr_dvd.titles if not x.enabled]
+                inactive_duration_total = sum(inactive_durations)
+                logger.info('*** %d active titles with total playtime of %s '
+                            '(%d inactive titles with playtime of %s) ***',
+                            len(active_durations), GetInHMS(active_duration_total),
+                            len(inactive_durations), GetInHMS(inactive_duration_total))
+                
+                dvd_episodes = self.FindEpisodesAndExtras()
+                self.episodes.extend(dvd_episodes)
+                
+                logger.debug(pformat(self.curr_dvd))
+                
+                self.previous_season = self.season
+                self.previous_series = self.series
+                    
+            else:
+                raise DvdNameError("Unable to parse folder name '{}'".format(root_folder))
+        else:
+            for folder in sorted(all_folders(root_folder, single_level=True)):
+                self.ProcessFolder(folder)
+        
+
+    def RemoveDuplicateTitles(self):
+        """Clears the enabled flag for any Titles that appear to be duplicates of earlier Titles on this DVD"""
+        for j, src_title in enumerate(self.curr_dvd.titles):
+            if src_title.enabled:
+                for title in self.curr_dvd.titles[j+1:]:
+                    if title.enabled and src_title.SimilarToTitle(title):
+                        title.enabled = False
+                        logger.debug('Title #%d appears to be a duplicate of Title #%d', 
+                                    title.num, src_title.num)
+
+    def RemoveShortTitles(self):
+        """Clears the enabled flag for any Titles shorter than title_min_duration"""
+        assert(isinstance(self.curr_dvd, DvdInfo))
+        for title in self.curr_dvd.titles:
+            if title.enabled and title.duration < self.title_min_duration:
+                title.enabled = False
+                logger.debug('Removed Title #%d for duration shorter than %d seconds', 
+                             title.num, self.title_min_duration)
+                
+    def RemoveVirtualTitles(self):
+        """
+        Remove Titles that appear to be combinations of other active Titles.
+        These Titles are often all of the episodes combined into a single Title.
+        """
+        pass
+
+
+    def FindEpisodesAndExtras(self):
+        """Finds and assigns episode/extras numbers to active Titles on this DVD"""
+        assert(isinstance(self.curr_dvd, DvdInfo))
+        episodes = list()
+        for title_idx, title in enumerate(self.curr_dvd.titles):
+            if not title.enabled:
+                continue
+            is_episode = any((duration - variance) < title.duration < (duration + variance) 
+                             for duration, variance in self.eps_durations)
+            is_2x_episode = any((duration - variance) < title.duration < (duration + variance) 
+                                for duration, variance in self.eps_2x_durations)
+            if is_episode:
+                logger.info('Title #%2d is episode "S%02dE%02d", duration %s', 
+                            title.num, self.season, self.eps_start_num, GetInHMS(title.duration))
+                episodes.append(EpisodeDetails(
+                                folder=self.curr_folder,
+                                title_idx=title_idx,
+                                title_num=title.num,
+                                season=self.season,
+                                eps_or_extra='episode',
+                                eps_start_num=self.eps_start_num,
+                                eps_end_num=self.eps_start_num))
+                self.eps_start_num += 1
+            elif is_2x_episode:
+                logger.info('Title #%2d is episode "S%02dE%02dE%02d", duration %s', 
+                            title.num, self.season, self.eps_start_num, self.eps_start_num + 1, 
+                            GetInHMS(title.duration))
+                episodes.append(EpisodeDetails(
+                                folder=self.curr_folder,
+                                title_idx=title_idx,
+                                title_num=title.num,
+                                season=self.season,
+                                eps_or_extra='episode',
+                                eps_start_num=self.eps_start_num,
+                                eps_end_num=self.eps_start_num + 1))
+                self.eps_start_num += 2
+            else:
+                logger.info('Title #%2d is extras  "S%02dExtras%02d", duration %s', 
+                            title.num, self.season, self.extras_start_num, GetInHMS(title.duration))
+                episodes.append(EpisodeDetails(
+                                folder=self.curr_folder,
+                                title_idx=title_idx,
+                                title_num=title.num,
+                                season=self.season,
+                                eps_or_extra='extra',
+                                eps_start_num=self.extras_start_num,
+                                eps_end_num=self.extras_start_num))
+                self.extras_start_num += 1
+        return episodes
+        
+def main():
+    default_src_root_folder = r'\\Archer\archer_s\_video_raw'
+    dst_root_folder = 'W:\\video_handbrake\\'
+
+    args = ParseArguments(default_src_root_folder)
     
     
     formatter = logging.Formatter(
@@ -155,47 +244,13 @@ def main():
     eps_start_num = options['eps_start_num']
     extras_start_num = options['extras_start_num']
     previous_season = None
+
+    episodes = EpisodeDetector(eps_start_num, extras_start_num, options['remove_dup_titles'], 
+                               options['remove_dup_titles'], options['title_min_duration'],
+                               eps_durations, eps_2x_durations)
     
-    for folder in all_folders(args.src_root_folder, single_level=True):
-        logger.debug('*** Processing folder %s', folder)
-        basename = os.path.basename(folder)
-        #print('{0}'.format(basename))
-        match = re.search('(.+?)_?[sS](\d+)_?[dD](\d+)', basename)
-        if match:
-            series = match.group(1)
-            season = int(match.group(2))
-            disc = int(match.group(3))
-            logger.info('series = "%s", season = %d, disc = %d', series, season, disc)
-            
-            if previous_season and season != previous_season:
-                eps_start_num = 1
-                extras_start_num = 1
-                
-            hb_out = ScanDvd(folder)
-            dvd = ParseHBOutput(hb_out)
-            if options['remove_dup_titles']:
-                RemoveDuplicateTitles(dvd)
-            RemoveShortTitles(dvd, options['title_min_duration'])
-            
-            active_durations = [x.duration for x in dvd.titles if x.enabled]
-            active_duration_total = sum(active_durations)
-            inactive_durations = [x.duration for x in dvd.titles if not x.enabled]
-            inactive_duration_total = sum(inactive_durations)
-            logger.info('*** %d active titles with total playtime of %s '
-                        '(%d inactive titles with playtime of %s) ***',
-                        len(active_durations), GetInHMS(active_duration_total),
-                        len(inactive_durations), GetInHMS(inactive_duration_total))
-            
-            dvd_episodes, eps_start_num, extras_start_num = FindEpisodesAndExtras(
-                dvd, eps_durations, eps_2x_durations, season, eps_start_num, extras_start_num)
-            episodes.extend(dvd_episodes)
-            
-            logger.debug(pformat(dvd))
-            
-            previous_season = season
-            
-        else:
-            logger.error('*** Unable to parse folder name ***')
+    episodes.ProcessFolder(args.src_root_folder)
+    
             
 def hbq_ex1():
     src_root_folder = 'W:\\_video_raw\\'
