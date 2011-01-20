@@ -326,7 +326,7 @@ class EpisodeDetector(object):
                 logger.debug('Removed Title #%d for being a virtual match by block count to titles %s', 
                              title.num, pformat([x[0] for x in c]))
 
-    def EnableAudioAndSubtitleTracks(self, langs=('eng', 'unk')):
+    def EnableAudioAndSubtitleTracks(self, langs=('eng', 'und')):
         """Enable audio and subtitle tracks with a language in langs"""
         assert(isinstance(self.curr_dvd, DvdInfo))
         for title in self.curr_dvd.titles:
