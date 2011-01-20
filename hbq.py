@@ -19,21 +19,31 @@ logger = logging.getLogger('hbq')
 EpisodeDetails = namedtuple('EpisodeDetails', 
                             'folder, title_idx, title_num, season, eps_or_extra, eps_start_num, eps_end_num')
 
-"""
-options = {'eps_duration': ((48.8*60, 2*60), (30*60, 2*60)), 
-           'expect_2x_duration': True,
-           'remove_dup_titles': True,
-           'eps_start_num': 1,
-           'extras_start_num': 1,
-           'title_min_duration': 60}
-"""
-options = {'eps_duration': ((25*60, 2*60),), 
-           'expect_2x_duration': True,
-           'remove_dup_titles': True,
-           'eps_start_num': 1,
-           'extras_start_num': 1,
-           'title_min_duration': 60}
 
+class TimeArgumentError(Exception):
+    pass
+
+def GetDurationInSeconds(hms_duration):
+    """Returns an integer tuple of seconds from a string in MM:SS+MM:SS format"""
+    try:
+        (duration, variance) = hms_duration.split('+')
+        duration = GetInSeconds(duration)
+        variance = GetInSeconds(variance)
+    except Exception:
+        raise TimeArgumentError('Unable to convert the time+variance value "{}" into seconds (expect MM:SS+MM:SS)'.format(hms_duration))
+    return duration, variance
+
+def GetInSeconds(hms):
+    """Returns an integer seconds value from a string in HH:MM:SS or MM:SS format"""
+    factor = 1
+    seconds = 0
+    try:
+        for x in reversed(hms.split(':')):
+            seconds += int(x) * factor
+            factor *= 60
+    except Exception:
+        raise TimeArgumentError('Unable to convert the time value "{}" into seconds'.format(hms))
+    return seconds
 
 def GetInHMS(seconds):
     """Returns a string in HH:MM:SS format from an integer seconds value"""
@@ -48,11 +58,114 @@ def GetInHMS(seconds):
 
 def ParseArguments(default_src_root_folder):
     parser = argparse.ArgumentParser(
-        description='Process a series of folders, reading the DVD information, display it to stdout')
-    parser.add_argument('src_root_folder', default=default_src_root_folder, nargs='?')
+        description='Process a series of folders, reading the DVD information, display it to stdout',
+        fromfile_prefix_chars='@')
+    
+    subparsers = parser.add_subparsers(dest='subparser_name', help='sub-command help')
+    
+    parser_scan = subparsers.add_parser('scan', help='scan help', 
+                                        usage='hbq.py scan root_folder [options]')
+    parser_scan.add_argument(
+        'root_folder', 
+        nargs=1)
+    parser_scan.add_argument(
+        '-d', '--eps-duration', 
+        dest='eps_duration', 
+        nargs='+',
+        default='25:00+1:00',
+        metavar='MM:SS+MM:SS',
+        help='A list of times (+/- variance) to be considered an episode (default: 25:00+1:00)')
+    parser_scan.add_argument(
+        '-t', '--title-min-duration', 
+        dest='title_min_duration', 
+        default='1:00',
+        metavar='MM:SS',
+        help='Minimum time for a title to be considered an episode or extra (default: 1:00)')
+    parser_scan.add_argument(
+        '--eps-start-num', 
+        dest='eps_start_num',
+        type=int,
+        default=1,
+        metavar='N',
+        help='The first episode number be be used for the first season detected (default: 1)')
+    parser_scan.add_argument(
+        '--extras-start-num', 
+        dest='extras_start_num',
+        type=int,
+        default=1,
+        metavar='N',
+        help='The first extra number be be used for the first season detected (default: 1)')
+    parser_scan.add_argument(
+        '-k', '--keep-dup-titles', 
+        dest='remove_dup_titles', 
+        action='store_const', 
+        const=False,
+        default=True,
+        help='Keep all duplicate titles (default: False)')
+    parser_scan.add_argument(
+        '-v', '--keep-virtual-titles', 
+        dest='remove_virtual_titles', 
+        action='store_const', 
+        const=False,
+        default=True,
+        help='Keep all virtual titles (default: False)')
+    parser_scan.add_argument(
+        '-2', '--no-2x-duration', 
+        dest='expect_2x_duration', 
+        action='store_const', 
+        const=False,
+        default=True,
+        help='Do not double --eps-duration values to find double-length episodes (default: False)')
+    parser_scan.set_defaults(command=ScanFolders)
+
+    parser_build = subparsers.add_parser('build', help='build help')
+    parser_build.add_argument('control_file', 
+                              nargs='?',
+                              default=r'w:\some_folder')
+    parser_build.set_defaults(command=BuildQueue)
+    
+    
+    #parser.add_argument('command', choices=('scan', 'build'))
     args = parser.parse_args()
+    #pprint(args)
+    #args.command()
+    if args.subparser_name == 'scan':
+        # convert the MM:SS and MM:SS+MM:SS argument values to seconds
+        args.title_min_duration = GetInSeconds(args.title_min_duration)
+        # MEZ this is a bit of a hack.  Is there a more Pythonistic way to ensure I have an iterable from a string
+        if not isinstance(args.eps_duration, list):
+            args.eps_duration = (args.eps_duration,)
+        args.eps_duration = [GetDurationInSeconds(duration) for duration in args.eps_duration]
+    #pprint(args)
     return args
 
+def ScanFolders(args):
+    """
+    Implements command line 'scan' arg
+    
+    Scans the folder provided and builds an XML output file
+    """
+    # Create 2x episode duration tuple
+    eps_durations = args.eps_duration
+    if args.expect_2x_duration:
+        eps_2x_durations = tuple((duration * 2, variance * 2) 
+                                 for duration, variance in eps_durations)
+    else:
+        eps_2x_durations = None
+        
+    episodes = list()
+    eps_start_num = args.eps_start_num
+    extras_start_num = args.extras_start_num
+    previous_season = None
+
+    episodes = EpisodeDetector(eps_start_num, extras_start_num, args.remove_dup_titles, 
+                               args.remove_virtual_titles, args.title_min_duration,
+                               eps_durations, eps_2x_durations)
+    
+    episodes.ProcessFolder(args.root_folder[0])
+
+def BuildQueue(args):
+    print('BuildQueue() not implemented')
 
 class DvdNameError(Exception):
     pass
@@ -232,7 +345,6 @@ def main():
 
     args = ParseArguments(default_src_root_folder)
     
-    
     formatter = logging.Formatter(
         '%(asctime)s - %(levelname)5s - %(module)s:%(lineno)03d[%(funcName)s()] - %(message)s')
     # create info file handler
@@ -256,24 +368,10 @@ def main():
     # set overall logging detail here
     logger.setLevel(logging.DEBUG)
 
-    # Create 2x episode duration tuple
-    eps_durations = options['eps_duration']
-    if options['expect_2x_duration']:
-        eps_2x_durations = tuple((duration * 2, variance * 2) 
-                                 for duration, variance in eps_durations)
-    else:
-        eps_2x_durations = None
-        
-    episodes = list()
-    eps_start_num = options['eps_start_num']
-    extras_start_num = options['extras_start_num']
-    previous_season = None
-
-    episodes = EpisodeDetector(eps_start_num, extras_start_num, options['remove_dup_titles'], 
-                               options['remove_dup_titles'], options['title_min_duration'],
-                               eps_durations, eps_2x_durations)
+    args.command(args)    
     
-    episodes.ProcessFolder(args.src_root_folder)
+    return
+
     
             
 def hbq_ex1():
