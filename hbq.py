@@ -69,6 +69,13 @@ def ParseArguments(default_src_root_folder):
         'root_folder', 
         nargs=1)
     parser_scan.add_argument(
+        '-f', '--xml-output-filename', 
+        dest='xml_filename', 
+        nargs=1,
+        default='',
+        metavar='FILE',
+        help='Filename to write scan results to (default: basename(<root_folder>).xml)')
+    parser_scan.add_argument(
         '-d', '--eps-duration', 
         dest='eps_duration', 
         nargs='+',
@@ -163,6 +170,28 @@ def ScanFolders(args):
                                eps_durations, eps_2x_durations)
     
     episodes.ProcessFolder(args.root_folder[0])
+    if not args.xml_filename:
+        args.xml_filename = os.path.basename(args.root_folder[0])
+        args.xml_filename = args.xml_filename or 'hbq'
+        args.xml_filename = args.xml_filename + '.xml'
+        
+    dvds_elem = Element('dvds') 
+    for dvd in episodes.dvds:
+        dvds_elem.append(dvd.EmitXML())
+        
+    txt = et.tostring(dvds_elem)
+    text_re = re.compile('>\n\s+([^<>\s].*?)\n\s+</', re.DOTALL)
+    ugly_xml = parseString(txt).toprettyxml(indent="  ")
+    
+    pretty_xml = text_re.sub('>\g<1></', ugly_xml)
+
+    f = open(args.xml_filename, 'w')
+    try:
+        f.write(pretty_xml)
+    finally:
+        f.close()
+    
+    
 
 def BuildQueue(args):
     print('BuildQueue() not implemented')
@@ -190,6 +219,7 @@ class EpisodeDetector(object):
         Process the given folder for DVD content.
         If the folder does not contain DVD content, recurse into subfolders.
         """
+        folder = os.path.abspath(folder)
         logger.info('Searching folder: %s', folder)
         if (os.path.exists(os.path.join(folder, 'VIDEO_TS')) or 
             os.path.exists(os.path.join(folder, 'VIDEO_TS.IFO'))):
@@ -198,6 +228,8 @@ class EpisodeDetector(object):
             match = re.search('(.+?)_?[sS](\d+)_?[dD](\d+)', basename)
             if match:
                 series = match.group(1)
+                series = series.replace('_', ' ')
+                series = series.strip()
                 season = int(match.group(2))
                 disc = int(match.group(3))
                 logger.info('series = "%s", season = %d, disc = %d', series, season, disc)

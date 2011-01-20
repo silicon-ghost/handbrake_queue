@@ -1,5 +1,10 @@
 """dvdinfo.py - Classes for describing the content of a DVD"""
 from collections import namedtuple
+import re
+import xml.etree.ElementTree as et
+from xml.etree.ElementTree import Element, SubElement, ElementTree
+from xml.dom.minidom import parseString
+
 
 
 AudioTrack = namedtuple('AudioTrack', 
@@ -28,6 +33,43 @@ class Title(object):
         self.eps_type = eps_type
         self.eps_start_num = eps_start_num
         self.eps_end_num = eps_end_num
+    
+    def EmitXML(self):
+        """Generates XML fragment stresenting this object"""
+        title_elem = Element('title', 
+                        attrib=dict(enabled=str(self.enabled), eps_type=str(self.eps_type), 
+                                    eps_start_num=str(self.eps_start_num), 
+                                    eps_end_num=str(self.eps_end_num)))
+        SubElement(title_elem, 'num').text = str(self.num)
+        SubElement(title_elem, 'duration').text = str(self.duration)
+        SubElement(title_elem, 'fps').text = str(self.fps)
+        SubElement(title_elem, 'num_blocks').text = str(self.num_blocks)
+        audio_tracks_elem = SubElement(title_elem, 'audio_tracks')
+        for track in self.audio_tracks:
+            track_elem = SubElement(audio_tracks_elem, 'track', attrib=dict(enabled=str(track.enabled)))
+            SubElement(track_elem, 'num').text = str(track.num)
+            SubElement(track_elem, 'desc').text = str(track.desc)
+            SubElement(track_elem, 'lang').text = str(track.lang)
+            SubElement(track_elem, 'sr').text = str(track.sr)
+            SubElement(track_elem, 'rate').text = str(track.rate)
+        subtitle_tracks_elem = SubElement(title_elem, 'subtitle_tracks')
+        for track in self.subtitle_tracks:
+            track_elem = SubElement(subtitle_tracks_elem, 'track', attrib=dict(enabled=str(track.enabled)))
+            SubElement(track_elem, 'num').text = str(track.num)
+            SubElement(track_elem, 'desc').text = str(track.desc)
+            SubElement(track_elem, 'lang').text = str(track.lang)
+            SubElement(track_elem, 'format').text = str(track.format)
+            SubElement(track_elem, 'src_name').text = str(track.src_name)
+        chapters_elem = SubElement(title_elem, 'chapters')
+        for chapter in self.chapters:
+            chapter_elem = SubElement(chapters_elem, 'chapter', attrib=dict(enabled=str(chapter.enabled)))
+            SubElement(chapter_elem, 'num').text = str(chapter.num)
+            SubElement(chapter_elem, 'cell_start').text = str(chapter.cell_start)
+            SubElement(chapter_elem, 'cell_end').text = str(chapter.cell_end)
+            SubElement(chapter_elem, 'block_count').text = str(chapter.block_count)
+            SubElement(chapter_elem, 'duration').text = str(chapter.duration)
+        
+        return title_elem
     
     def AddAudioTrack(self, track):
         """Add track to list of audio tracks"""
@@ -71,6 +113,15 @@ class DvdInfo(object):
         self.series = series
         self.season = season
 
+    def EmitXML(self):
+        dvd_elem = Element('dvd', 
+                           attrib=dict(folder=str(self.folder), series=str(self.series), 
+                                       season=str(self.season)))
+        titles_elem = SubElement(dvd_elem, 'titles')
+        for title in self.titles:
+            titles_elem.append(title.EmitXML())
+        return dvd_elem
+        
     def AddTitle(self, title):
         """Add a Title to list of titles"""
         self.titles.append(title)
@@ -82,4 +133,3 @@ class DvdInfo(object):
             ',series=', repr(self.series),
             ',season=', repr(self.season),
             ')\n'))
-
