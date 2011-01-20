@@ -134,6 +134,8 @@ def ScanFolders(args):
         args.xml_filename = os.path.basename(args.root_folder[0])
         args.xml_filename = args.xml_filename or 'hbq'
         args.xml_filename = args.xml_filename + '.xml'
+    else:
+        args.xml_filename = args.xml_filename[0]
         
     dvds_elem = et.Element('dvds') 
     for dvd in episodes.dvds:
@@ -186,6 +188,8 @@ loggers:
     eps_detector:
         level: DEBUG
         handlers: [console, info_file, debug_file]
+"""
+"""
 root:
     level: DEBUG
     handlers: [console, info_file, debug_file]
