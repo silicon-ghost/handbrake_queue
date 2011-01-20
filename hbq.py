@@ -231,6 +231,7 @@ class EpisodeDetector(object):
                             len(inactive_durations), GetInHMS(inactive_duration_total))
                 
                 self.FindEpisodesAndExtras()
+                self.EnableAudioAndSubtitleTracks()
                 self.dvds.append(self.curr_dvd)
                 logger.debug(pformat(self.curr_dvd))
                 
@@ -298,12 +299,12 @@ class EpisodeDetector(object):
         assert(isinstance(self.curr_dvd, DvdInfo))
         for title in self.curr_dvd.titles:
             assert(isinstance(title, Title))
-            for track in title.audio_tracks:
+            for i, track in enumerate(title.audio_tracks):
                 if track.lang in langs:
-                    track.enabled = True
-            for track in title.subtitle_tracks:
+                    title.audio_tracks[i] = track._replace(enabled=True)
+            for i, track in enumerate(title.subtitle_tracks):
                 if track.lang in langs:
-                    track.enabled = True
+                    title.subtitle_tracks[i] = track._replace(enabled=True)
 
     def FindEpisodesAndExtras(self):
         """Finds and assigns episode/extras numbers to active Titles on this DVD"""
