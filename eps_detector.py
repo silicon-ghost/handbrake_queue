@@ -157,11 +157,10 @@ class EpisodeDetector(object):
             for i, track in enumerate(title.subtitle_tracks):
                 if track.lang in langs:
                     title.subtitle_tracks[i] = track._replace(enabled=True)
-                if (self.default_close_captions 
-                    and title.default_subtitle_track == 0 
-                    and track.enabled
-                    and track.src_name == 'CC'):
-                    title.default_subtitle_track = track.num
+                    if (self.default_close_captions 
+                        and title.default_subtitle_track == 0 
+                        and track.src_name == 'CC'):
+                        title.default_subtitle_track = track.num
 
     def FindEpisodesAndExtras(self):
         """Finds and assigns episode/extras numbers to active Titles on this DVD"""

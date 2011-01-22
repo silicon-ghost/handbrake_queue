@@ -14,7 +14,7 @@ from oreillycookbook.files import all_folders
 # Project modules
 from eps_detector import EpisodeDetector
 from time_util import GetInSeconds, GetDurationInSeconds
-from dvdinfo import WriteDvdListToXML
+from dvdinfo import WriteDvdListToXML, ReadDvdListFromXML
 
 logger = logging.getLogger('hbq')
 
@@ -97,8 +97,7 @@ def ParseArguments():
 
     parser_build = subparsers.add_parser('build', help='build help')
     parser_build.add_argument('control_file', 
-                              nargs='?',
-                              default=r'w:\some_folder')
+                              nargs='+')
     parser_build.set_defaults(command=BuildQueue)
     
     args = parser.parse_args()
@@ -149,8 +148,10 @@ def ScanFolders(args):
 
     
 def BuildQueue(args):
-    print('BuildQueue() not implemented')
-        
+    xml_filename = args.control_file[0]
+    dvds = ReadDvdListFromXML(xml_filename)
+    #pprint(dvds)
+    WriteDvdListToXML(dvds, 'test.xml')
 
 logging_conf = """
 version: 1

@@ -21,7 +21,8 @@ class Title(object):
     """Describes a single title on a DVD"""
     def __init__(self, num=None, duration=None, fps=None, num_blocks=None, audio_tracks=None, 
                  subtitle_tracks=None, chapters=None, enabled=True, eps_type=None, 
-                 eps_start_num=0, eps_end_num=0, default_audio_track=0, default_subtitle_track=0):
+                 eps_start_num=0, eps_end_num=0, default_audio_track=0, default_subtitle_track=0,
+                 combing_detected=False):
         self.num = num
         self.duration = duration
         self.fps = fps
@@ -35,6 +36,48 @@ class Title(object):
         self.eps_end_num = eps_end_num
         self.default_audio_track = default_audio_track
         self.default_subtitle_track = default_subtitle_track
+        self.combing_detected = combing_detected
+        
+    def ParseXML(self, title_elem):
+        assert(isinstance(title_elem, Element))
+        self.default_audio_track = title_elem.attrib['default_audio_track']
+        self.default_subtitle_track = title_elem.attrib['default_subtitle_track']
+        self.eps_start_num = title_elem.attrib['eps_start_num']
+        self.eps_end_num = title_elem.attrib['eps_end_num']
+        self.eps_type = title_elem.attrib['eps_type']
+        self.enabled = title_elem.attrib['enabled'] == 'True'
+        self.num = int(title_elem.find('num').text)
+        self.duration = int(title_elem.find('duration').text)
+        self.fps = title_elem.find('fps').text
+        self.num_blocks = int(title_elem.find('num_blocks').text)
+        self.combing_detected = title_elem.find('combing_detected').text == 'True'
+        self.audio_tracks = list()
+        for track_elem in title_elem.findall('audio_tracks/track'):
+            self.audio_tracks.append(AudioTrack(
+                num=int(track_elem.find('num').text), 
+                desc=track_elem.find('desc').text, 
+                lang=track_elem.find('lang').text, 
+                sr=int(track_elem.find('sr').text), 
+                rate=int(track_elem.find('rate').text),
+                enabled=track_elem.attrib['enabled']=='True'))
+        self.subtitle_tracks = list()
+        for track_elem in title_elem.findall('subtitle_tracks/track'):
+            self.subtitle_tracks.append(SubtitleTrack(
+                num=int(track_elem.find('num').text), 
+                desc=track_elem.find('desc').text, 
+                lang=track_elem.find('lang').text, 
+                format=track_elem.find('format').text, 
+                src_name=track_elem.find('src_name').text,
+                enabled=track_elem.attrib['enabled']=='True'))
+        self.chapters = list()
+        for chapter_elem in title_elem.findall('chapters/chapter'):
+            self.chapters.append(Chapter(
+                num=int(chapter_elem.find('num').text), 
+                cell_start=int(chapter_elem.find('cell_start').text), 
+                cell_end=int(chapter_elem.find('cell_end').text), 
+                block_count=int(chapter_elem.find('block_count').text), 
+                duration=int(chapter_elem.find('duration').text), 
+                enabled=chapter_elem.attrib['enabled']=='True'))
     
     def EmitXML(self):
         """Generates XML fragment stresenting this object"""
@@ -48,6 +91,7 @@ class Title(object):
         SubElement(title_elem, 'duration').text = str(self.duration)
         SubElement(title_elem, 'fps').text = str(self.fps)
         SubElement(title_elem, 'num_blocks').text = str(self.num_blocks)
+        SubElement(title_elem, 'combing_detected').text = str(self.combing_detected)
         audio_tracks_elem = SubElement(title_elem, 'audio_tracks')
         for track in self.audio_tracks:
             track_elem = SubElement(audio_tracks_elem, 'track', attrib=dict(enabled=str(track.enabled)))
@@ -108,6 +152,7 @@ class Title(object):
             ',\n\teps_end_num=', repr(self.eps_end_num),
             ',\n\tdefault_audio_track=', repr(self.default_audio_track),
             ',\n\tdefault_subtitle_track=', repr(self.default_subtitle_track),
+            ',\n\tcombing_detected=', repr(self.combing_detected),
             ')\n'))
     
     
@@ -128,6 +173,17 @@ class DvdInfo(object):
             titles_elem.append(title.EmitXML())
         return dvd_elem
         
+    def ParseXML(self, dvd_elem):
+        assert(isinstance(dvd_elem, Element))
+        self.folder = dvd_elem.attrib['folder']
+        self.series = dvd_elem.attrib['series']
+        self.season = int(dvd_elem.attrib['season'])
+        self.titles = list()
+        for title_elem in dvd_elem.findall('titles/title'):
+            title = Title()
+            title.ParseXML(title_elem)
+            self.titles.append(title)
+    
     def AddTitle(self, title):
         """Add a Title to list of titles"""
         self.titles.append(title)
@@ -156,3 +212,15 @@ def WriteDvdListToXML(dvds, filename):
         f.write(pretty_xml)
     finally:
         f.close()
+
+def ReadDvdListFromXML(filename):
+    dvds = list()
+    
+    tree = et.parse(filename)
+    root_elem = tree.getroot()
+
+    for dvd_elem in root_elem.findall('dvd'):
+        dvd = DvdInfo()
+        dvd.ParseXML(dvd_elem)
+        dvds.append(dvd)
+    return dvds
