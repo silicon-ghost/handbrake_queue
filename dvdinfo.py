@@ -21,7 +21,7 @@ class Title(object):
     """Describes a single title on a DVD"""
     def __init__(self, num=None, duration=None, fps=None, num_blocks=None, audio_tracks=None, 
                  subtitle_tracks=None, chapters=None, enabled=True, eps_type=None, 
-                 eps_start_num=None, eps_end_num=None):
+                 eps_start_num=0, eps_end_num=0):
         self.num = num
         self.duration = duration
         self.fps = fps
