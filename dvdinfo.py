@@ -21,7 +21,7 @@ class Title(object):
     """Describes a single title on a DVD"""
     def __init__(self, num=None, duration=None, fps=None, num_blocks=None, audio_tracks=None, 
                  subtitle_tracks=None, chapters=None, enabled=True, eps_type=None, 
-                 eps_start_num=0, eps_end_num=0):
+                 eps_start_num=0, eps_end_num=0, default_audio_track=0, default_subtitle_track=0):
         self.num = num
         self.duration = duration
         self.fps = fps
@@ -33,13 +33,17 @@ class Title(object):
         self.eps_type = eps_type
         self.eps_start_num = eps_start_num
         self.eps_end_num = eps_end_num
+        self.default_audio_track = default_audio_track
+        self.default_subtitle_track = default_subtitle_track
     
     def EmitXML(self):
         """Generates XML fragment stresenting this object"""
         title_elem = Element('title', 
                         attrib=dict(enabled=str(self.enabled), eps_type=str(self.eps_type), 
                                     eps_start_num=str(self.eps_start_num), 
-                                    eps_end_num=str(self.eps_end_num)))
+                                    eps_end_num=str(self.eps_end_num),
+                                    default_audio_track=str(self.default_audio_track),
+                                    default_subtitle_track=str(self.default_subtitle_track)))
         SubElement(title_elem, 'num').text = str(self.num)
         SubElement(title_elem, 'duration').text = str(self.duration)
         SubElement(title_elem, 'fps').text = str(self.fps)
@@ -102,6 +106,8 @@ class Title(object):
             ',\n\teps_type=', repr(self.eps_type),
             ',\n\teps_start_num=', repr(self.eps_start_num),
             ',\n\teps_end_num=', repr(self.eps_end_num),
+            ',\n\tdefault_audio_track=', repr(self.default_audio_track),
+            ',\n\tdefault_subtitle_track=', repr(self.default_subtitle_track),
             ')\n'))
     
     
@@ -133,3 +139,20 @@ class DvdInfo(object):
             ',series=', repr(self.series),
             ',season=', repr(self.season),
             ')\n'))
+
+def WriteDvdListToXML(dvds, filename):
+    dvds_elem = et.Element('dvds') 
+    for dvd in dvds:
+        dvds_elem.append(dvd.EmitXML())
+        
+    txt = et.tostring(dvds_elem)
+    text_re = re.compile('>\n\s+([^<>\s].*?)\n\s+</', re.DOTALL)
+    ugly_xml = parseString(txt).toprettyxml(indent="  ")
+    
+    pretty_xml = text_re.sub('>\g<1></', ugly_xml)
+
+    f = open(filename, 'w')
+    try:
+        f.write(pretty_xml)
+    finally:
+        f.close()
