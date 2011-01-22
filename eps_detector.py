@@ -161,9 +161,9 @@ class EpisodeDetector(object):
             assert(isinstance(title, Title))
             if not title.enabled:
                 continue
-            is_episode = any((duration - variance) < title.duration < (duration + variance) 
+            is_episode = any((duration - variance) <= title.duration <= (duration + variance) 
                              for duration, variance in self.eps_durations)
-            is_2x_episode = any((duration - variance) < title.duration < (duration + variance) 
+            is_2x_episode = any((duration - variance) <= title.duration <= (duration + variance) 
                                 for duration, variance in self.eps_2x_durations)
             if is_episode:
                 logger.info('Title #%2d is episode "S%02dE%02d", duration %s', 
