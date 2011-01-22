@@ -14,7 +14,7 @@ from oreillycookbook.files import all_folders
 # Project modules
 from eps_detector import EpisodeDetector
 from time_util import GetInSeconds, GetDurationInSeconds
-
+from dvdinfo import WriteDvdListToXML
 
 logger = logging.getLogger('hbq')
 
@@ -96,13 +96,6 @@ def ParseArguments():
     
     args = parser.parse_args()
     
-    if args.subparser_name == 'scan':
-        # convert the MM:SS and MM:SS+MM:SS argument values to seconds
-        args.title_min_duration = GetInSeconds(args.title_min_duration)
-        # MEZ this is a bit of a hack.  Is there a more Pythonistic way to ensure I have an iterable from a string
-        if not isinstance(args.eps_duration, list):
-            args.eps_duration = (args.eps_duration,)
-        args.eps_duration = [GetDurationInSeconds(duration) for duration in args.eps_duration]
     return args
 
 
@@ -112,6 +105,14 @@ def ScanFolders(args):
     
     Scans the folder provided and builds an XML output file
     """
+    # convert the MM:SS and MM:SS+MM:SS argument values to seconds
+    args.title_min_duration = GetInSeconds(args.title_min_duration)
+    # MEZ this is a bit of a hack.  Is there a more Pythonistic way to ensure I have an iterable from a string
+    if not isinstance(args.eps_duration, list):
+        args.eps_duration = (args.eps_duration,)
+    args.eps_duration = [GetDurationInSeconds(duration) for duration in args.eps_duration]
+
+    root_folder = os.path.abspath(args.root_folder[0])
     # Create 2x episode duration tuple
     eps_durations = args.eps_duration
     if args.expect_2x_duration:
@@ -129,31 +130,17 @@ def ScanFolders(args):
                                args.remove_virtual_titles, args.title_min_duration,
                                eps_durations, eps_2x_durations)
     
-    episodes.ProcessFolder(args.root_folder[0])
+    episodes.ProcessFolder(root_folder)
     if not args.xml_filename:
-        args.xml_filename = os.path.basename(args.root_folder[0])
-        args.xml_filename = args.xml_filename or 'hbq'
-        args.xml_filename = args.xml_filename + '.xml'
+        xml_filename = os.path.basename(root_folder)
+        xml_filename = xml_filename or 'hbq'
+        xml_filename = xml_filename + '.xml'
     else:
-        args.xml_filename = args.xml_filename[0]
+        xml_filename = args.xml_filename[0]
         
-    dvds_elem = et.Element('dvds') 
-    for dvd in episodes.dvds:
-        dvds_elem.append(dvd.EmitXML())
-        
-    txt = et.tostring(dvds_elem)
-    text_re = re.compile('>\n\s+([^<>\s].*?)\n\s+</', re.DOTALL)
-    ugly_xml = parseString(txt).toprettyxml(indent="  ")
-    
-    pretty_xml = text_re.sub('>\g<1></', ugly_xml)
+    WriteDvdListToXML(episodes.dvds, xml_filename)
 
-    f = open(args.xml_filename, 'w')
-    try:
-        f.write(pretty_xml)
-    finally:
-        f.close()
     
-
 def BuildQueue(args):
     print('BuildQueue() not implemented')
         
