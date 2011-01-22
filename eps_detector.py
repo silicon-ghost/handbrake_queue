@@ -17,7 +17,7 @@ class DvdNameError(Exception):
 
 class EpisodeDetector(object):
     def __init__(self, eps_start_num, extras_start_num, remove_dup_titles, remove_virtual_titles, 
-                 title_min_duration, eps_durations, eps_2x_durations):
+                 title_min_duration, eps_durations, eps_2x_durations, default_close_captions):
         self.eps_start_num = eps_start_num
         self.extras_start_num = extras_start_num
         self.remove_dup_titles = remove_dup_titles
@@ -25,6 +25,7 @@ class EpisodeDetector(object):
         self.title_min_duration = title_min_duration
         self.eps_durations = eps_durations
         self.eps_2x_durations = eps_2x_durations
+        self.default_close_captions = default_close_captions
         self.previous_season = None
         self.previous_series = None
         self.curr_dvd = None
@@ -143,7 +144,10 @@ class EpisodeDetector(object):
                              title.num, pformat([x[0] for x in c]))
 
     def EnableAudioAndSubtitleTracks(self, langs=('eng', 'und')):
-        """Enable audio and subtitle tracks with a language in langs"""
+        """
+        Enable audio and subtitle tracks with a language in langs
+        If default to Close Captions is true, set the default_subtitle_track.
+        """
         assert(isinstance(self.curr_dvd, DvdInfo))
         for title in self.curr_dvd.titles:
             assert(isinstance(title, Title))
@@ -153,6 +157,11 @@ class EpisodeDetector(object):
             for i, track in enumerate(title.subtitle_tracks):
                 if track.lang in langs:
                     title.subtitle_tracks[i] = track._replace(enabled=True)
+                if (self.default_close_captions 
+                    and title.default_subtitle_track == 0 
+                    and track.enabled
+                    and track.src_name == 'CC'):
+                    title.default_subtitle_track = track.num
 
     def FindEpisodesAndExtras(self):
         """Finds and assigns episode/extras numbers to active Titles on this DVD"""

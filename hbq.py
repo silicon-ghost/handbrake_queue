@@ -73,6 +73,13 @@ def ParseArguments():
         default=True,
         help='Keep all duplicate titles (default: False)')
     parser_scan.add_argument(
+        '--no-default-close-captions', 
+        dest='default_close_captions', 
+        action='store_const', 
+        const=False,
+        default=True,
+        help='Do not default subtitles to Closed Captions (default: False)')
+    parser_scan.add_argument(
         '-v', '--keep-virtual-titles', 
         dest='remove_virtual_titles', 
         action='store_const', 
@@ -128,7 +135,7 @@ def ScanFolders(args):
 
     episodes = EpisodeDetector(eps_start_num, extras_start_num, args.remove_dup_titles, 
                                args.remove_virtual_titles, args.title_min_duration,
-                               eps_durations, eps_2x_durations)
+                               eps_durations, eps_2x_durations, args.default_close_captions)
     
     episodes.ProcessFolder(root_folder)
     if not args.xml_filename:
