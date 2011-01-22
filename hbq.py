@@ -19,7 +19,7 @@ from time_util import GetInSeconds, GetDurationInSeconds
 logger = logging.getLogger('hbq')
 
 
-def ParseArguments(default_src_root_folder):
+def ParseArguments():
     parser = argparse.ArgumentParser(
         description='Process a series of folders, reading the DVD information, display it to stdout',
         fromfile_prefix_chars='@')
@@ -196,46 +196,14 @@ root:
 """
 
 def main():
-    default_src_root_folder = r'\\Archer\archer_s\_video_raw'
-    dst_root_folder = 'W:\\video_handbrake\\'
-
-    args = ParseArguments(default_src_root_folder)
+    args = ParseArguments()
     
     logging_dict = yaml.load(logging_conf)
-    #pprint(logging_dict)
     logging.config.dictConfig(logging_dict)
     
-    """
-    formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)5s - %(module)s:%(lineno)03d[%(funcName)s()] - %(message)s')
-    # create info file handler
-    fh = logging.FileHandler(filename='hbq_info.log')
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    
-    # create debug file handler
-    fh = logging.FileHandler(filename='hbq_debug.log')
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    
-    # create console handler
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
-    
-    # set overall logging detail here
-    logger.setLevel(logging.DEBUG)
-    """
-    
     args.command(args)    
-    
-    return
 
     
-            
 def hbq_ex1():
     src_root_folder = 'W:\\_video_raw\\'
     dst_root_folder = 'W:\\video_handbrake\\'
