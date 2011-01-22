@@ -40,10 +40,10 @@ class Title(object):
         
     def ParseXML(self, title_elem):
         assert(isinstance(title_elem, Element))
-        self.default_audio_track = title_elem.attrib['default_audio_track']
-        self.default_subtitle_track = title_elem.attrib['default_subtitle_track']
-        self.eps_start_num = title_elem.attrib['eps_start_num']
-        self.eps_end_num = title_elem.attrib['eps_end_num']
+        self.default_audio_track = int(title_elem.attrib['default_audio_track'])
+        self.default_subtitle_track = int(title_elem.attrib['default_subtitle_track'])
+        self.eps_start_num = int(title_elem.attrib['eps_start_num'])
+        self.eps_end_num = int(title_elem.attrib['eps_end_num'])
         self.eps_type = title_elem.attrib['eps_type']
         self.enabled = title_elem.attrib['enabled'] == 'True'
         self.num = int(title_elem.find('num').text)
