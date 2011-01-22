@@ -14,7 +14,7 @@ from oreillycookbook.files import all_folders
 # Project modules
 from eps_detector import EpisodeDetector
 from time_util import GetInSeconds, GetDurationInSeconds
-from dvdinfo import WriteDvdListToXML, ReadDvdListFromXML
+from dvdinfo import DvdInfo, Title, WriteDvdListToXML, ReadDvdListFromXML
 
 logger = logging.getLogger('hbq')
 
@@ -98,6 +98,13 @@ def ParseArguments():
     parser_build = subparsers.add_parser('build', help='build help')
     parser_build.add_argument('control_file', 
                               nargs='+')
+    parser_build.add_argument(
+        '-d', '--dest-folder', 
+        dest='dst_folder', 
+        nargs=1,
+        default=['W:\\video_handbrake'],
+        metavar='DIR',
+        help='Destination directory for MKV files (default: W:\\video_handbrake)')
     parser_build.set_defaults(command=BuildQueue)
     
     args = parser.parse_args()
@@ -153,6 +160,83 @@ def BuildQueue(args):
     #pprint(dvds)
     WriteDvdListToXML(dvds, 'test.xml')
 
+    cq = 19.25
+    job_num = 0
+    dst_root_folder = args.dst_folder[0]
+    
+    root = et.Element('ArrayOfJob')
+    for dvd in dvds:
+        assert(isinstance(dvd, DvdInfo))
+        for title in dvd.titles:
+            assert(isinstance(title, Title))
+            if not title.enabled:
+                continue
+            
+            cfg = {}
+            cfg['cq'] = cq
+            cfg['title_num'] = title.num
+            cfg['src_folder'] = dvd.folder
+            if title.eps_type == 'episode':
+                eps_num_str = ''.join(['E{:02d}'.format(x) for x in 
+                                       range(title.eps_start_num, title.eps_end_num + 1)])
+            elif title.eps_type == 'extra':
+                eps_num_str = 'Extras{:02d}'.format(title.eps_start_num)
+            else:
+                raise Exception('eps_type must be "episode" or "extra" (had "{}")'.format(title.eps_type))
+            cfg['destination'] = '{0} S{1:02d}{2}.mkv'.format(
+                os.path.join(dst_root_folder, dvd.series), dvd.season, eps_num_str)
+            cfg['fps'] = title.fps
+            cfg['audio_tracks'] = ','.join([str(track.num) for track in title.audio_tracks if track.enabled])
+            cfg['audio_encoders'] = ','.join(['copy:ac3' for track in title.audio_tracks if track.enabled])
+            enabled_subtitles = [track.num for track in title.subtitle_tracks if track.enabled]
+            cfg['subtitles'] = ",".join([str(x) for x in enabled_subtitles])
+            if title.default_subtitle_track:
+                # The value is based on the 'subtitles' idx, not the value in track.num
+                cfg['default_subtitle'] = str(enabled_subtitles.index(title.default_subtitle_track) + 1)
+            elif cfg['subtitles']:
+                # There is at least 1 subtitle enabled
+                cfg['default_subtitle'] = '1'
+            else:
+                cfg['default_subtitle'] = ''
+            
+            job_num += 1
+            job = et.SubElement(root, 'Job')
+            et.SubElement(job, 'Id').text = format(job_num)
+            et.SubElement(job, 'Title').text = '{:d}'.format(cfg['title_num'])
+            et.SubElement(job, 'Query').text = (
+                ' -i "{src_folder}"'
+                ' -t {title_num}'
+                ' --angle 1'
+                ' -o "{destination}"'
+                ' -f mkv'
+                ' --detelecine --decomb --denoise="weak"'
+                ' -w 720 --loose-anamorphic'
+                ' -e x264 -q {cq}'
+                ' -r {fps}'
+                ' -a {audio_tracks} -E {audio_encoders}'
+                ' --subtitle {subtitles} --subtitle-default={default_subtitle}'
+                ' -m'
+                ' -x ref=5:bframes=5:subq=9:mixed-refs=0:8x8dct=1:trellis=2:b-pyramid=1:me=umh:merange=32:analyse=all'
+                ' -v 2'.format(**cfg))
+            et.SubElement(job, 'CustomQuery').text = 'false'
+            et.SubElement(job, 'Source').text = cfg['src_folder']
+            et.SubElement(job, 'Destination').text = cfg['destination']
+    
+    
+    txt = et.tostring(root)
+    ugly_xml = parseString(txt).toprettyxml(indent="  ")
+    text_re = re.compile('>\n\s+([^<>\s].*?)\n\s+</', re.DOTALL)
+    pretty_xml = text_re.sub('>\g<1></', ugly_xml)
+    (base, ext) = os.path.splitext(os.path.basename(xml_filename))
+    fid = open(base + '.queue', 'w')
+    try:
+        fid.write(pretty_xml)
+    finally:
+        fid.close()
+
+    
+    
+    
 logging_conf = """
 version: 1
 formatters:
@@ -203,7 +287,7 @@ def hbq_ex1():
     src_root_folder = 'W:\\_video_raw\\'
     dst_root_folder = 'W:\\video_handbrake\\'
     
-    cq = 20.0
+    cq = 19.25
     basename = 'MASH'
     season = 1
     num_eps = 24
