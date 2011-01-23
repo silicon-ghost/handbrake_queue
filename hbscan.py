@@ -97,6 +97,12 @@ def ParseHBOutput(src):
                 states.append(STATES.InTitle)
                 states.append(STATES.SubtitleTracksStart)
             else:
+                if line.startswith('  + combing detected, may be interlaced'):
+                    title.combing_detected = True
+                    logger.info('%03d: Combing detected', line_num)
+                    states.append(STATES.InTitle)
+                    states.append(STATES.ReadLine)
+                    continue
                 match = re.search('(?<=\+ duration: )(\d\d):(\d\d):(\d\d)', line)
                 if match:
                     duration_str = match.group()
@@ -258,15 +264,9 @@ def main():
     import argparse
     from pprint import pprint
     
-    movie_dir = 'W:\\_video_raw\\MASHS1D1'
-    movie_dir = r'\\tpol\Raw Video\VOYAGER_S1D1'
-    movie_dir = r'\\Archer\archer_s\_video_raw\COMBAT_SEASON_2_MISSION_1_DISC_1'
-    default_root_dir = r'\\Archer\archer_s\_video_raw'
-    default_root_dir = r'\\tpol\Raw Video\VOYAGER_S1D1'
-
     parser = argparse.ArgumentParser(
         description='Process a series of folders, reading the DVD information, display it to stdout')
-    parser.add_argument('root_dir', default=default_root_dir, nargs='?')
+    parser.add_argument('root_dir', nargs=1)
     args = parser.parse_args()
     
     formatter = logging.Formatter(
@@ -286,7 +286,7 @@ def main():
     # set overall logging detail here
     logger.setLevel(logging.DEBUG)
 
-    folders = all_folders(args.root_dir, single_level=True)
+    folders = all_folders(args.root_dir[0], single_level=True)
     for movie_dir in folders:
         cmd_out = ScanDvd(movie_dir)
         dvd = ParseHBOutput(cmd_out)
