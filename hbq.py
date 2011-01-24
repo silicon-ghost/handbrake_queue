@@ -198,7 +198,10 @@ def BuildQueue(args):
                 cfg['default_subtitle'] = '1'
             else:
                 cfg['default_subtitle'] = ''
-            
+            if title.combing_detected:
+                cfg['detelecine'] = '--detelecine'
+            else:
+                cfg['detelecine'] = ''
             job_num += 1
             job = et.SubElement(root, 'Job')
             et.SubElement(job, 'Id').text = format(job_num)
@@ -209,7 +212,7 @@ def BuildQueue(args):
                 ' --angle 1'
                 ' -o "{destination}"'
                 ' -f mkv'
-                ' --detelecine --decomb --denoise="weak"'
+                ' {detelecine} --decomb --denoise="weak"'
                 ' -w 720 --loose-anamorphic'
                 ' -e x264 -q {cq}'
                 ' -r {fps}'
