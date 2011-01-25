@@ -1,0 +1,29 @@
+version: 1
+formatters:
+    simple:
+        format: "%(asctime)s - %(levelname)5s - %(message)s"
+    precise:
+        format: "%(asctime)s - %(levelname)5s - %(module)s:%(lineno)03d[%(funcName)s()] - %(message)s"
+handlers:
+    console:
+        class: logging.StreamHandler
+        level: INFO
+        formatter: simple
+        stream: ext://sys.stdout
+    info_file:
+        class: logging.FileHandler
+        level: INFO
+        filename: hbq_info.log
+        formatter: simple
+    debug_file:
+        class: logging.FileHandler
+        level: DEBUG
+        filename: hbq_debug.log
+        formatter: precise
+loggers:
+    hbq:
+        level: DEBUG
+        handlers: [console, info_file, debug_file]
+    eps_detector:
+        level: DEBUG
+        handlers: [console, info_file, debug_file]
