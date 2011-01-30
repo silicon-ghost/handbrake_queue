@@ -3,6 +3,7 @@
 import argparse
 import logging
 import logging.config
+import os
 import os.path
 from pprint import pprint, pformat
 import re
@@ -105,6 +106,13 @@ def ParseArguments():
         default=['W:\\video_handbrake'],
         metavar='DIR',
         help='Destination directory for MKV files (default: W:\\video_handbrake)')
+    parser_build.add_argument(
+        '-m', '--make-output-folders', 
+        dest='make_output_folders', 
+        action='store_const', 
+        const=True,
+        default=False,
+        help='Create all output folders (default: False)')
     parser_build.set_defaults(command=BuildQueue)
     
     args = parser.parse_args()
@@ -183,8 +191,16 @@ def BuildQueue(args):
                 eps_num_str = 'Extras{:02d}'.format(title.eps_start_num)
             else:
                 raise Exception('eps_type must be "episode" or "extra" (had "{}")'.format(title.eps_type))
-            cfg['destination'] = '{0} S{1:02d}{2}.mkv'.format(
-                os.path.join(dst_root_folder, dvd.series), dvd.season, eps_num_str)
+            dest_folder = os.path.join(dst_root_folder, 
+                                       dvd.series, 
+                                       'Season {:d}'.format(dvd.season))
+            
+            if args.make_output_folders and not os.path.isdir(dest_folder):
+                logger.debug('Creating folder "%s"', dest_folder)
+                os.makedirs(dest_folder)
+            cfg['destination'] = '{0} S{1:02d}{2}.mkv'.format(os.path.join(dest_folder, dvd.series), 
+                                                              dvd.season, 
+                                                              eps_num_str)
             cfg['fps'] = title.fps
             cfg['audio_tracks'] = ','.join([str(track.num) for track in title.audio_tracks if track.enabled])
             cfg['audio_encoders'] = ','.join(['copy:ac3' for track in title.audio_tracks if track.enabled])
