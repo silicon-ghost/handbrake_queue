@@ -125,10 +125,12 @@ class EpisodeDetector(object):
                 pass
             # Get num_blocks for all other active titles
             match = None
+            logger.debug('Checking Title %d for virtual title matches', title.num)
             other_titles = [(x.num, x.num_blocks) for x in self.curr_dvd.titles 
                             if x.enabled and x.num != title.num]
             # Process all combinations of other titles, taken r at a time, up to all titles
             for r in range(2, len(other_titles) + 1):
+                logger.debug('Building virtual title search %d of %d', r, len(other_titles) + 1)
                 for c in combinations(other_titles, r):
                     num_blocks = sum(x[1] for x in c)
                     if num_blocks == title.num_blocks:
