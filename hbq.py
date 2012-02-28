@@ -24,106 +24,113 @@ def ParseArguments():
     parser = argparse.ArgumentParser(
         description='Process a series of folders, reading the DVD information, display it to stdout',
         fromfile_prefix_chars='@')
-    
+
     subparsers = parser.add_subparsers(dest='subparser_name', help='sub-command help')
-    
-    parser_scan = subparsers.add_parser('scan', help='scan help', 
+
+    parser_scan = subparsers.add_parser('scan', help='scan help',
                                         usage='hbq.py scan root_folder [options]')
     parser_scan.add_argument(
-        'root_folder', 
+        'root_folder',
         nargs=1)
     parser_scan.add_argument(
-        '-f', '--xml-output-filename', 
-        dest='xml_filename', 
+        '-f', '--xml-output-filename',
+        dest='xml_filename',
         nargs=1,
         default='',
         metavar='FILE',
         help='Filename to write scan results to (default: basename(<root_folder>).xml)')
     parser_scan.add_argument(
-        '-d', '--eps-duration', 
-        dest='eps_duration', 
+        '-d', '--eps-duration',
+        dest='eps_duration',
         nargs='+',
         default='25:00+1:00',
         metavar='MM:SS+MM:SS',
         help='A list of times (+/- variance) to be considered an episode (default: 25:00+1:00)')
     parser_scan.add_argument(
-        '-t', '--title-min-duration', 
-        dest='title_min_duration', 
+        '-t', '--title-min-duration',
+        dest='title_min_duration',
         default='1:00',
         metavar='MM:SS',
         help='Minimum time for a title to be considered an episode or extra (default: 1:00)')
     parser_scan.add_argument(
-        '--eps-start-num', 
+        '--eps-start-num',
         dest='eps_start_num',
         type=int,
         default=1,
         metavar='N',
         help='The first episode number be be used for the first season detected (default: 1)')
     parser_scan.add_argument(
-        '--extras-start-num', 
+        '--extras-start-num',
         dest='extras_start_num',
         type=int,
         default=1,
         metavar='N',
         help='The first extra number be be used for the first season detected (default: 1)')
     parser_scan.add_argument(
-        '-k', '--keep-dup-titles', 
-        dest='remove_dup_titles', 
-        action='store_const', 
+        '-k', '--keep-dup-titles',
+        dest='remove_dup_titles',
+        action='store_const',
         const=False,
         default=True,
         help='Keep all duplicate titles (default: False)')
     parser_scan.add_argument(
-        '--no-default-close-captions', 
-        dest='default_close_captions', 
-        action='store_const', 
+        '--no-default-close-captions',
+        dest='default_close_captions',
+        action='store_const',
         const=False,
         default=True,
         help='Do not default subtitles to Closed Captions (default: False)')
     parser_scan.add_argument(
-        '-v', '--keep-virtual-titles', 
-        dest='remove_virtual_titles', 
-        action='store_const', 
+        '-v', '--keep-virtual-titles',
+        dest='remove_virtual_titles',
+        action='store_const',
         const=False,
         default=True,
         help='Keep all virtual titles (default: False)')
     parser_scan.add_argument(
-        '-2', '--no-2x-duration', 
-        dest='expect_2x_duration', 
-        action='store_const', 
+        '-2', '--no-2x-duration',
+        dest='expect_2x_duration',
+        action='store_const',
         const=False,
         default=True,
         help='Do not double --eps-duration values to find double-length episodes (default: False)')
     parser_scan.set_defaults(command=ScanFolders)
 
     parser_build = subparsers.add_parser('build', help='build help')
-    parser_build.add_argument('control_file', 
+    parser_build.add_argument('control_file',
                               nargs='+')
     parser_build.add_argument(
-        '-d', '--dest-folder', 
-        dest='dst_folder', 
+        '-d', '--dest-folder',
+        dest='dst_folder',
         nargs=1,
         default=['W:\\video_handbrake'],
         metavar='DIR',
         help='Destination directory for MKV files (default: W:\\video_handbrake)')
     parser_build.add_argument(
-        '-m', '--make-output-folders', 
-        dest='make_output_folders', 
-        action='store_const', 
+        '-m', '--make-output-folders',
+        dest='make_output_folders',
+        action='store_const',
         const=True,
         default=False,
         help='Create all output folders (default: False)')
+    parser_build.add_argument(
+        '-2', '--2nd-gen-queue',
+        dest='make_2nd_gen_queue',
+        action='store_const',
+        const=True,
+        default=False,
+        help='Create 2nd generation queue format (default: False)')
     parser_build.set_defaults(command=BuildQueue)
-    
+
     args = parser.parse_args()
-    
+
     return args
 
 
 def ScanFolders(args):
     """
     Implements command line 'scan' arg
-    
+
     Scans the folder provided and builds an XML output file
     """
     # convert the MM:SS and MM:SS+MM:SS argument values to seconds
@@ -137,20 +144,20 @@ def ScanFolders(args):
     # Create 2x episode duration tuple
     eps_durations = args.eps_duration
     if args.expect_2x_duration:
-        eps_2x_durations = tuple((duration * 2, variance * 2) 
+        eps_2x_durations = tuple((duration * 2, variance * 2)
                                  for duration, variance in eps_durations)
     else:
         eps_2x_durations = None
-        
+
     episodes = list()
     eps_start_num = args.eps_start_num
     extras_start_num = args.extras_start_num
     previous_season = None
 
-    episodes = EpisodeDetector(eps_start_num, extras_start_num, args.remove_dup_titles, 
+    episodes = EpisodeDetector(eps_start_num, extras_start_num, args.remove_dup_titles,
                                args.remove_virtual_titles, args.title_min_duration,
                                eps_durations, eps_2x_durations, args.default_close_captions)
-    
+
     episodes.ProcessFolder(root_folder)
     if not args.xml_filename:
         xml_filename = os.path.basename(root_folder)
@@ -158,10 +165,10 @@ def ScanFolders(args):
         xml_filename = xml_filename + '.xml'
     else:
         xml_filename = args.xml_filename[0]
-        
+
     WriteDvdListToXML(episodes.dvds, xml_filename)
 
-    
+
 def BuildQueue(args):
     xml_filename = args.control_file[0]
     dvds = ReadDvdListFromXML(xml_filename)
@@ -171,35 +178,39 @@ def BuildQueue(args):
     cq = 19.25
     job_num = 0
     dst_root_folder = args.dst_folder[0]
-    
-    root = et.Element('ArrayOfJob')
+
+    if args.make_2nd_gen_queue:
+        root = et.Element('ArrayOfQueueTask')
+    else:
+        root = et.Element('ArrayOfJob')
+
     for dvd in dvds:
         assert(isinstance(dvd, DvdInfo))
         for title in dvd.titles:
             assert(isinstance(title, Title))
             if not title.enabled:
                 continue
-            
+
             cfg = {}
             cfg['cq'] = cq
             cfg['title_num'] = title.num
             cfg['src_folder'] = dvd.folder
             if title.eps_type == 'episode':
-                eps_num_str = ''.join(['E{:02d}'.format(x) for x in 
+                eps_num_str = ''.join(['E{:02d}'.format(x) for x in
                                        range(title.eps_start_num, title.eps_end_num + 1)])
             elif title.eps_type == 'extra':
                 eps_num_str = 'Extras{:02d}'.format(title.eps_start_num)
             else:
                 raise Exception('eps_type must be "episode" or "extra" (had "{}")'.format(title.eps_type))
-            dest_folder = os.path.join(dst_root_folder, 
-                                       dvd.series, 
+            dest_folder = os.path.join(dst_root_folder,
+                                       dvd.series,
                                        'Season {:d}'.format(dvd.season))
-            
+
             if args.make_output_folders and not os.path.isdir(dest_folder):
                 logger.debug('Creating folder "%s"', dest_folder)
                 os.makedirs(dest_folder)
-            cfg['destination'] = '{0} S{1:02d}{2}.mkv'.format(os.path.join(dest_folder, dvd.series), 
-                                                              dvd.season, 
+            cfg['destination'] = '{0} S{1:02d}{2}.mkv'.format(os.path.join(dest_folder, dvd.series),
+                                                              dvd.season,
                                                               eps_num_str)
             cfg['fps'] = title.fps
             cfg['audio_tracks'] = ','.join([str(track.num) for track in title.audio_tracks if track.enabled])
@@ -219,7 +230,11 @@ def BuildQueue(args):
             else:
                 cfg['detelecine'] = ''
             job_num += 1
-            job = et.SubElement(root, 'Job')
+
+            if args.make_2nd_gen_queue:
+                job = et.SubElement(root, 'QueueTask')
+            else:
+                job = et.SubElement(root, 'Job')
             et.SubElement(job, 'Id').text = format(job_num)
             et.SubElement(job, 'Title').text = '{:d}'.format(cfg['title_num'])
             et.SubElement(job, 'Query').text = (
@@ -237,11 +252,16 @@ def BuildQueue(args):
                 ' -m'
                 ' -x ref=5:bframes=5:subq=9:mixed-refs=0:8x8dct=1:trellis=2:b-pyramid=1:me=umh:merange=32:analyse=all'
                 ' -v 2'.format(**cfg))
-            et.SubElement(job, 'CustomQuery').text = 'false'
+            if args.make_2nd_gen_queue:
+                et.SubElement(job, 'CustomQuery').text = 'true'
+                et.SubElement(job, 'Status').text = 'Waiting'
+            else:
+                et.SubElement(job, 'CustomQuery').text = 'false'
+
             et.SubElement(job, 'Source').text = cfg['src_folder']
             et.SubElement(job, 'Destination').text = cfg['destination']
-    
-    
+
+
     txt = et.tostring(root)
     ugly_xml = parseString(txt).toprettyxml(indent="  ")
     text_re = re.compile('>\n\s+([^<>\s].*?)\n\s+</', re.DOTALL)
@@ -253,9 +273,9 @@ def BuildQueue(args):
     finally:
         fid.close()
 
-    
-    
-    
+
+
+
 logging_conf = """
 version: 1
 formatters:
@@ -295,13 +315,12 @@ root:
 
 def main():
     args = ParseArguments()
-    
+
     logging_dict = yaml.load(logging_conf)
     logging.config.dictConfig(logging_dict)
-    
-    args.command(args)    
 
-        
+    args.command(args)
+
+
 if __name__ == '__main__':
     main()
-    
