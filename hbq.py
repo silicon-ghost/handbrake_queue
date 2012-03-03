@@ -114,12 +114,12 @@ def ParseArguments():
         default=False,
         help='Create all output folders (default: False)')
     parser_build.add_argument(
-        '-2', '--2nd-gen-queue',
-        dest='make_2nd_gen_queue',
+        '-1', '--1st-gen-queue',
+        dest='make_1st_gen_queue',
         action='store_const',
         const=True,
         default=False,
-        help='Create 2nd generation queue format (default: False)')
+        help='Create 1st generation queue format (default: False)')
     parser_build.set_defaults(command=BuildQueue)
 
     args = parser.parse_args()
@@ -179,10 +179,10 @@ def BuildQueue(args):
     job_num = 0
     dst_root_folder = args.dst_folder[0]
 
-    if args.make_2nd_gen_queue:
-        root = et.Element('ArrayOfQueueTask')
-    else:
+    if args.make_1st_gen_queue:
         root = et.Element('ArrayOfJob')
+    else:
+        root = et.Element('ArrayOfQueueTask')
 
     for dvd in dvds:
         assert(isinstance(dvd, DvdInfo))
@@ -231,10 +231,10 @@ def BuildQueue(args):
                 cfg['detelecine'] = ''
             job_num += 1
 
-            if args.make_2nd_gen_queue:
-                job = et.SubElement(root, 'QueueTask')
-            else:
+            if args.make_1st_gen_queue:
                 job = et.SubElement(root, 'Job')
+            else:
+                job = et.SubElement(root, 'QueueTask')
             et.SubElement(job, 'Id').text = format(job_num)
             et.SubElement(job, 'Title').text = '{:d}'.format(cfg['title_num'])
             et.SubElement(job, 'Query').text = (
@@ -252,11 +252,11 @@ def BuildQueue(args):
                 ' -m'
                 ' -x ref=5:bframes=5:subq=9:mixed-refs=0:8x8dct=1:trellis=2:b-pyramid=1:me=umh:merange=32:analyse=all'
                 ' -v 2'.format(**cfg))
-            if args.make_2nd_gen_queue:
+            if args.make_1st_gen_queue:
+                et.SubElement(job, 'CustomQuery').text = 'false'
+            else:
                 et.SubElement(job, 'CustomQuery').text = 'true'
                 et.SubElement(job, 'Status').text = 'Waiting'
-            else:
-                et.SubElement(job, 'CustomQuery').text = 'false'
 
             et.SubElement(job, 'Source').text = cfg['src_folder']
             et.SubElement(job, 'Destination').text = cfg['destination']
